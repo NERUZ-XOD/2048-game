@@ -36,7 +36,7 @@ class Game2048:
         self.load_sounds()
         
         # Background color for empty tiles
-        self.empty_color = "#cdc1b4"
+        self.empty_color = "#bbada0"
         
         self.colors = {
             0: "#cdc1b4", 2: "#eee4da", 4: "#ede0c8", 8: "#f2b179",
@@ -119,7 +119,7 @@ class Game2048:
     
     def play_sound(self, sound_key):
         """Play a sound effect"""
-        if self.music_on and sound_key in self.sounds and self.sounds[sound_key]:
+        if hasattr(self, 'music_on') and self.music_on and sound_key in self.sounds and self.sounds[sound_key]:
             try:
                 self.sounds[sound_key].play()
             except Exception as e:
@@ -187,9 +187,10 @@ class Game2048:
             row_tiles = []
             for j in range(4):
                 # Create tile labels that will overlay on the grid
+                # Use a frame with a transparent background for empty cells
                 tile = tk.Label(self.frame, text="", font=("Arial", 20, "bold"), 
                               bg=self.empty_color, compound="center",
-                              width=4, height=2)
+                              width=4, height=2, borderwidth=0, highlightthickness=0)
                 # Use place instead of grid to precisely position over the background
                 tile.place(x=j*90+5, y=i*90+5, width=80, height=80)
                 row_tiles.append(tile)
@@ -279,18 +280,19 @@ class Game2048:
         for i in range(4):
             for j in range(4):
                 value = self.grid[i, j]
-                if value == 0 and 0 in self.images:
-                    # Empty tile - visible but transparent
-                    self.tiles[i][j].config(image=self.images[0], text="")
-                elif value in self.images:
-                    # Display the image for this value
-                    self.tiles[i][j].config(image=self.images[value], text="")
+                if value == 0:
+                    # Make empty tiles completely invisible
+                    self.tiles[i][j].place_forget()  # Remove from view
                 else:
-                    # Fallback to text if image not available
-                    self.tiles[i][j].config(image="", text=str(value) if value else "")
-                
-                # Make sure the tile is visible and properly placed
-                self.tiles[i][j].lift()  # Ensure tile is above background
+                    # Make sure the tile is visible and properly placed
+                    self.tiles[i][j].place(x=j*90+5, y=i*90+5, width=80, height=80)
+                    
+                    if value in self.images:
+                        # Display the image for this value
+                        self.tiles[i][j].config(image=self.images[value], text="", bg=self.colors.get(value, "#cdc1b4"))
+                    else:
+                        # Fallback to text if image not available
+                        self.tiles[i][j].config(image="", text=str(value) if value else "", bg=self.colors.get(value, "#cdc1b4"))
         
         # Update score display
         self.score_label.config(text=f"Score: {self.current_score}")
