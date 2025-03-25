@@ -3,14 +3,37 @@ from PIL import Image, ImageTk  # You'll need to install Pillow: pip install Pil
 import numpy as np
 import random
 import os
+import json
+import pygame
+from tkinter import messagebox
 
 class Game2048:
-    def __init__(self):
-        self.window = tk.Tk()
-        self.window.title("2048 Game")
-        self.window.geometry("400x500")
+    def __init__(self, master):
+        self.window = master
+        self.window.title("2048 Retro Game")
+        self.window.geometry("400x600")
         self.window.resizable(False, False)
         self.grid = np.zeros((4, 4), dtype=int)
+        
+        # Score tracking
+        self.current_score = 0
+        self.high_score = self.load_high_score()
+        
+        # Initialize pygame for sound effects
+        pygame.mixer.init()
+        
+        # Load sound effects
+        self.sound_folder = os.path.join(os.path.dirname(__file__), "sounds")
+        os.makedirs(self.sound_folder, exist_ok=True)
+        
+        self.sounds = {
+            'move': None,
+            'merge': None,
+            'game_over': None,
+            'win': None
+        }
+        
+        self.load_sounds()
         
         # Background color for empty tiles
         self.empty_color = "#cdc1b4"
@@ -34,7 +57,73 @@ class Game2048:
         self.update_ui()
 
         self.window.bind("<Key>", self.handle_keypress)
-        self.window.mainloop()
+    
+    def load_high_score(self):
+        """Load high score from file"""
+        try:
+            with open('high_score.json', 'r') as f:
+                data = json.load(f)
+                return data.get('high_score', 0)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return 0
+    
+    def save_high_score(self):
+        """Save high score to file"""
+        try:
+            with open('high_score.json', 'w') as f:
+                json.dump({'high_score': int(self.high_score)}, f)
+        except Exception as e:
+            print(f"Error saving high score: {e}")
+    
+    def load_sounds(self):
+        """Load sound effects"""
+        # Check if sound files exist, if not create placeholder files
+        sound_files = {
+            'move': 'move.wav',
+            'merge': 'merge.wav',
+            'game_over': 'game_over.wav',
+            'win': 'win.wav'
+        }
+        
+        # Create placeholder sound files if they don't exist
+        for sound_key, sound_file in sound_files.items():
+            sound_path = os.path.join(self.sound_folder, sound_file)
+            if not os.path.exists(sound_path):
+                try:
+                    # Create an empty WAV file (1 second of silence)
+                    from scipy.io import wavfile
+                    import numpy as np
+                    
+                    sample_rate = 44100  # standard sample rate
+                    duration = 0.1  # duration in seconds
+                    samples = np.zeros(int(sample_rate * duration))  # silent audio
+                    
+                    wavfile.write(sound_path, sample_rate, samples.astype(np.int16))
+                    print(f"Created placeholder sound file: {sound_path}")
+                except ImportError:
+                    print("SciPy not installed, cannot create placeholder sound files")
+                except Exception as e:
+                    print(f"Error creating sound file {sound_key}: {e}")
+        
+        # Now load the sound files (either existing or newly created)
+        for sound_key, sound_file in sound_files.items():
+            sound_path = os.path.join(self.sound_folder, sound_file)
+            if os.path.exists(sound_path):
+                try:
+                    self.sounds[sound_key] = pygame.mixer.Sound(sound_path)
+                    print(f"Loaded sound: {sound_key}")
+                except Exception as e:
+                    print(f"Error loading sound {sound_key}: {e}")
+            else:
+                print(f"Sound file not found: {sound_path}")
+    
+    def play_sound(self, sound_key):
+        """Play a sound effect"""
+        if self.music_on and sound_key in self.sounds and self.sounds[sound_key]:
+            try:
+                self.sounds[sound_key].play()
+            except Exception as e:
+                print(f"Error playing sound {sound_key}: {e}")
     
     def load_grid_background(self):
         """Load or create the grid background image"""
@@ -70,7 +159,7 @@ class Game2048:
             self.grid_background = None
     
     def init_ui(self):
-        # Create main frame with appropriate size for the grid
+        # Create main frame for the game grid
         self.frame = tk.Frame(self.window, bg="#bbada0", width=370, height=370)
         self.frame.pack(pady=20)
         self.frame.pack_propagate(False)  # Prevent frame from shrinking to fit children
@@ -79,11 +168,18 @@ class Game2048:
         if hasattr(self, 'grid_background') and self.grid_background:
             self.bg_label = tk.Label(self.frame, image=self.grid_background, bg="#bbada0")
             self.bg_label.place(x=0, y=0)
-            
-            # Create a label at the bottom for game info
-            info_label = tk.Label(self.window, text="Use arrow keys or WASD to move tiles",
-                                 font=("Arial", 10), bg=self.window.cget('bg'))
-            info_label.pack(pady=10)
+        
+        # Score display
+        self.score_frame = tk.Frame(self.window, bg="#bbada0")
+        self.score_frame.pack(fill="x", padx=20, pady=10)
+        
+        self.score_label = tk.Label(self.score_frame, text=f"Score: {self.current_score}", 
+                                   font=("Arial", 14, "bold"), bg="#bbada0", fg="#ffffff")
+        self.score_label.pack(side="left", padx=10)
+        
+        self.high_score_label = tk.Label(self.score_frame, text=f"Best: {self.high_score}", 
+                                        font=("Arial", 14, "bold"), bg="#bbada0", fg="#ffffff")
+        self.high_score_label.pack(side="right", padx=10)
         
         # Create tile labels with consistent size
         self.tiles = []
@@ -98,6 +194,33 @@ class Game2048:
                 tile.place(x=j*90+5, y=i*90+5, width=80, height=80)
                 row_tiles.append(tile)
             self.tiles.append(row_tiles)
+        
+        # Bottom menu
+        self.bottom_frame = tk.Frame(self.window, bg="#bbada0")
+        self.bottom_frame.pack(fill="x", side="bottom", padx=20, pady=20)
+        
+        self.save_button = tk.Button(self.bottom_frame, text="Save Game", 
+                                    command=self.save_game, font=("Arial", 12),
+                                    bg="#8f7a66", fg="#ffffff")
+        self.save_button.pack(side="left", padx=10)
+        
+        self.help_button = tk.Button(self.bottom_frame, text="Help", 
+                                    command=self.show_help, font=("Arial", 12),
+                                    bg="#8f7a66", fg="#ffffff")
+        self.help_button.pack(side="left", padx=10)
+        
+        self.quit_button = tk.Button(self.bottom_frame, text="Quit", 
+                                    command=self.quit_game, font=("Arial", 12),
+                                    bg="#8f7a66", fg="#ffffff")
+        self.quit_button.pack(side="right", padx=10)
+        
+        # Music control
+        self.music_button = tk.Button(self.bottom_frame, text="🔊", 
+                                     command=self.toggle_music, font=("Arial", 12),
+                                     bg="#8f7a66", fg="#ffffff", width=2)
+        self.music_button.pack(side="right", padx=10)
+        
+        self.music_on = True
 
     def load_images(self):
         """Load all tile images from the images folder"""
@@ -169,6 +292,10 @@ class Game2048:
                 # Make sure the tile is visible and properly placed
                 self.tiles[i][j].lift()  # Ensure tile is above background
         
+        # Update score display
+        self.score_label.config(text=f"Score: {self.current_score}")
+        self.high_score_label.config(text=f"Best: {self.high_score}")
+        
         self.window.update_idletasks()
 
     def spawn_tile(self):
@@ -190,6 +317,10 @@ class Game2048:
             if row[i] == row[i+1] and row[i] != 0:
                 row[i] *= 2
                 row[i+1] = 0
+                self.current_score += row[i]  # Update score when tiles merge
+                if row[i] == 2048:
+                    self.show_win_message()
+                self.play_sound('merge')
         return row
 
     def move(self, direction):
@@ -219,34 +350,134 @@ class Game2048:
                 self.grid[i] = self.merge(self.grid[i][::-1])[::-1]
                 self.grid[i] = self.compress(self.grid[i][::-1])[::-1]
         
+        # Check if the grid changed
         if not np.array_equal(original_grid, self.grid):
+            self.play_sound('move')
             self.spawn_tile()
-        self.update_ui()
-        if self.is_game_over():
-            self.show_game_over()
+            self.update_ui()
+            
+            # Update high score if current score is higher
+            if self.current_score > self.high_score:
+                self.high_score = self.current_score
+                self.save_high_score()
+            
+            # Check if game is over
+            if self.is_game_over():
+                self.play_sound('game_over')
+                self.show_game_over()
     
     def is_game_over(self):
+        # Check if there are any empty cells
         if 0 in self.grid:
             return False
+        
+        # Check if there are any adjacent same values
         for i in range(4):
             for j in range(3):
-                if self.grid[i, j] == self.grid[i, j+1] or self.grid[j, i] == self.grid[j+1, i]:
+                if self.grid[i][j] == self.grid[i][j+1]:
                     return False
+        
+        for i in range(3):
+            for j in range(4):
+                if self.grid[i][j] == self.grid[i+1][j]:
+                    return False
+        
         return True
-
+    
+    def show_win_message(self):
+        """Show a win message when the player reaches 2048"""
+        self.play_sound('win')
+        messagebox.showinfo("Congratulations!", "You've reached 2048! You can continue playing to achieve a higher score.")
+    
     def show_game_over(self):
-        game_over_window = tk.Toplevel(self.window)
-        game_over_window.title("Game Over")
-        game_over_window.geometry("200x100")
-        tk.Label(game_over_window, text="Game Over!", font=("Arial", 16, "bold")).pack(pady=10)
-        tk.Button(game_over_window, text="Restart", command=lambda: [game_over_window.destroy(), self.restart_game()]).pack()
+        """Show game over message"""
+        response = messagebox.askyesno("Game Over", f"Game Over! Your score: {self.current_score}\nDo you want to play again?")
+        if response:
+            self.restart_game()
+        else:
+            self.quit_game()
 
     def restart_game(self):
         self.grid = np.zeros((4, 4), dtype=int)
+        self.current_score = 0
         self.spawn_tile()
         self.spawn_tile()
         self.update_ui()
-
+    
+    def save_game(self):
+        """Save the current game state"""
+        # Convert NumPy arrays and int64 values to standard Python types
+        grid_list = [[int(cell) for cell in row] for row in self.grid.tolist()]
+        
+        game_state = {
+            'grid': grid_list,
+            'score': int(self.current_score),
+            'high_score': int(self.high_score)
+        }
+        
+        try:
+            with open('saved_game.json', 'w') as f:
+                json.dump(game_state, f)
+            messagebox.showinfo("Game Saved", "Your game has been saved successfully!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not save game: {e}")
+    
+    def load_game(self):
+        """Load a saved game state"""
+        try:
+            with open('saved_game.json', 'r') as f:
+                game_state = json.load(f)
+                
+            self.grid = np.array(game_state['grid'], dtype=int)
+            self.current_score = int(game_state['score'])
+            self.high_score = int(game_state['high_score'])
+            self.update_ui()
+            messagebox.showinfo("Game Loaded", "Your saved game has been loaded successfully!")
+            return True
+        except (FileNotFoundError, json.JSONDecodeError):
+            messagebox.showinfo("No Saved Game", "No saved game found. Starting a new game.")
+            return False
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not load game: {e}")
+            return False
+    
+    def show_help(self):
+        """Show help information"""
+        help_text = """
+        How to Play 2048:
+        
+        - Use arrow keys or WASD to move tiles
+        - When two tiles with the same number touch, they merge into one
+        - Try to reach the 2048 tile!
+        
+        Controls:
+        - Arrow keys or WASD: Move tiles
+        - Save Game: Save your current progress
+        - Help: Show this help message
+        - Quit: Exit the game
+        - 🔊: Toggle sound on/off
+        """
+        messagebox.showinfo("How to Play", help_text)
+    
+    def toggle_music(self):
+        """Toggle music on/off"""
+        self.music_on = not self.music_on
+        if self.music_on:
+            self.music_button.config(text="🔊")
+            # Resume music if it was playing
+        else:
+            self.music_button.config(text="🔇")
+            # Pause music if it was playing
+    
+    def quit_game(self):
+        """Exit to main menu"""
+        if messagebox.askyesno("Quit Game", "Are you sure you want to quit? Your progress will be lost unless saved."):
+            self.window.destroy()
+            root = tk.Tk()
+            root.title("2048 Retro Game")
+            root.geometry("400x600")
+            MainMenu(root)
+    
     def handle_keypress(self, event):
         if event.keysym in ("Up", "w"):
             self.move('up')
@@ -257,5 +488,123 @@ class Game2048:
         elif event.keysym in ("Right", "d"):
             self.move('right')
 
+
+class MainMenu:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("2048 Retro Game")
+        self.frame = tk.Frame(master, bg="#000000", width=400, height=600)
+        self.frame.pack(fill="both", expand=True)
+        
+        # Load high score
+        self.high_score = self.load_high_score()
+        
+        # Load pixel art background if available
+        self.load_background()
+        
+        # High Score Display
+        self.high_score_label = tk.Label(self.frame, text=f"High Score: {self.high_score}", 
+                                        font=("Arial", 16, "bold"), fg="#FFFFFF", bg="#000000")
+        self.high_score_label.pack(pady=20)
+        
+        # Title
+        self.title_label = tk.Label(self.frame, text="2048 RETRO", 
+                                   font=("Arial", 36, "bold"), fg="#FFD700", bg="#000000")
+        self.title_label.pack(pady=20)
+        
+        # Main Menu Buttons
+        button_frame = tk.Frame(self.frame, bg="#000000")
+        button_frame.pack(pady=20)
+        
+        button_style = {"font": ("Arial", 14), "width": 15, "height": 2, 
+                       "bg": "#333333", "fg": "#FFFFFF", "activebackground": "#555555"}
+        
+        self.new_game_button = tk.Button(button_frame, text="New Game", 
+                                        command=self.start_new_game, **button_style)
+        self.new_game_button.pack(pady=10)
+        
+        self.continue_button = tk.Button(button_frame, text="Continue", 
+                                        command=self.continue_game, **button_style)
+        self.continue_button.pack(pady=10)
+        
+        self.how_to_play_button = tk.Button(button_frame, text="How to Play", 
+                                           command=self.show_how_to_play, **button_style)
+        self.how_to_play_button.pack(pady=10)
+        
+        self.exit_button = tk.Button(button_frame, text="Exit", 
+                                    command=self.exit_game, **button_style)
+        self.exit_button.pack(pady=10)
+        
+        # Initialize pygame for sound effects if not already initialized
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+    
+    def load_background(self):
+        """Load pixel art background for the main menu"""
+        image_folder = os.path.join(os.path.dirname(__file__), "images")
+        os.makedirs(image_folder, exist_ok=True)
+        
+        bg_path = os.path.join(image_folder, "menu_background.png")
+        if os.path.exists(bg_path):
+            try:
+                img = Image.open(bg_path)
+                img = img.resize((400, 600), Image.Resampling.LANCZOS)
+                self.bg_image = ImageTk.PhotoImage(img)
+                
+                # Create a label for the background image
+                bg_label = tk.Label(self.frame, image=self.bg_image)
+                bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+                
+                # Make sure other widgets appear on top of the background
+                self.frame.lift()
+            except Exception as e:
+                print(f"Error loading menu background: {e}")
+    
+    def load_high_score(self):
+        """Load high score from file"""
+        try:
+            with open('high_score.json', 'r') as f:
+                data = json.load(f)
+                return data.get('high_score', 0)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return 0
+
+    def start_new_game(self):
+        self.frame.destroy()
+        Game2048(self.master)
+
+    def continue_game(self):
+        """Load the last saved game state"""
+        self.frame.destroy()
+        game = Game2048(self.master)
+        if not game.load_game():
+            # If loading fails, the game will start a new game
+            pass
+
+    def show_how_to_play(self):
+        help_text = """
+        How to Play 2048:
+        
+        - Use arrow keys or WASD to move tiles
+        - When two tiles with the same number touch, they merge into one
+        - Try to reach the 2048 tile!
+        
+        Controls:
+        - Arrow keys or WASD: Move tiles
+        - Save Game: Save your current progress
+        - Help: Show this help message
+        - Quit: Exit the game
+        - 🔊: Toggle sound on/off
+        """
+        messagebox.showinfo("How to Play", help_text)
+
+    def exit_game(self):
+        self.master.quit()
+
+
 if __name__ == "__main__":
-    Game2048()
+    root = tk.Tk()
+    root.title("2048 Retro Game")
+    root.geometry("400x600")
+    MainMenu(root)
+    root.mainloop()
