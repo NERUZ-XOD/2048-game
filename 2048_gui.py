@@ -126,7 +126,8 @@ class Game2048:
                 print(f"Error playing sound {sound_key}: {e}")
     
     def load_grid_background(self):
-        """Load or create the grid background image"""
+        """Load grid background image"""
+        # Path to images folder - create if it doesn't exist
         image_folder = os.path.join(os.path.dirname(__file__), "images")
         os.makedirs(image_folder, exist_ok=True)
         
@@ -134,7 +135,7 @@ class Game2048:
         if not os.path.exists(bg_path):
             try:
                 # Create a basic grid background if one doesn't exist
-                bg_img = Image.new('RGBA', (360, 360), (187, 173, 160, 255))  # Main grid background color
+                bg_img = Image.new('RGBA', (370, 370), (187, 173, 160, 255))  # Main grid background color
                 
                 # Draw grid cells
                 for i in range(4):
@@ -151,9 +152,33 @@ class Game2048:
                 return
         
         try:
+            # Open the image and apply zoom effect by cropping and resizing
             img = Image.open(bg_path)
+            
+            # Get original dimensions
+            width, height = img.size
+            
+            # Calculate zoom factor (5% zoom)
+            zoom_factor = 1.05
+            
+            # Calculate new dimensions for cropping
+            new_width = int(width / zoom_factor)
+            new_height = int(height / zoom_factor)
+            
+            # Calculate crop box (centered)
+            left = (width - new_width) // 2
+            top = (height - new_height) // 2
+            right = left + new_width
+            bottom = top + new_height
+            
+            # Crop the image to zoom in
+            img = img.crop((left, top, right, bottom))
+            
+            # Resize back to original dimensions
+            img = img.resize((370, 370), Image.Resampling.LANCZOS)
+            
             self.grid_background = ImageTk.PhotoImage(img)
-            print("Successfully loaded grid background image")
+            print("Successfully loaded grid background image with zoom effect")
         except Exception as e:
             print(f"Error loading grid background: {e}")
             self.grid_background = None
@@ -167,7 +192,7 @@ class Game2048:
         # Add grid background image first
         if hasattr(self, 'grid_background') and self.grid_background:
             self.bg_label = tk.Label(self.frame, image=self.grid_background, bg="#bbada0")
-            self.bg_label.place(x=0, y=0)
+            self.bg_label.place(x=0, y=0, width=370, height=370)
         
         # Score display
         self.score_frame = tk.Frame(self.window, bg="#bbada0")
@@ -183,16 +208,36 @@ class Game2048:
         
         # Create tile labels with consistent size
         self.tiles = []
+        
+        # Precise measurements for grid alignment
+        # These values are carefully tuned to match the grid background
+        tile_size = 68  # Reduced to fit better within cells
+        
+        # Fixed positions for each cell in the grid
+        # These are manually tuned to match the grid background
+        grid_positions = [
+            # Row 1
+            [(25, 25), (117, 25), (209, 25), (280, 25)],
+            # Row 2
+            [(25, 117), (117, 117), (209, 117), (280, 117)],
+            # Row 3
+            [(25, 209), (117, 209), (209, 209), (280, 209)],
+            # Row 4
+            [(25, 280), (117, 280), (209, 280), (280, 280)]
+        ]
+        
         for i in range(4):
             row_tiles = []
             for j in range(4):
                 # Create tile labels that will overlay on the grid
-                # Use a frame with a transparent background for empty cells
-                tile = tk.Label(self.frame, text="", font=("Arial", 20, "bold"), 
+                tile = tk.Label(self.frame, text="", font=("Arial", 18, "bold"), 
                               bg=self.empty_color, compound="center",
                               width=4, height=2, borderwidth=0, highlightthickness=0)
-                # Use place instead of grid to precisely position over the background
-                tile.place(x=j*90+5, y=i*90+5, width=80, height=80)
+                
+                # Use the pre-defined positions for precise placement
+                x_pos, y_pos = grid_positions[i][j]
+                
+                tile.place(x=x_pos, y=y_pos, width=tile_size, height=tile_size)
                 row_tiles.append(tile)
             self.tiles.append(row_tiles)
         
@@ -229,12 +274,15 @@ class Game2048:
         image_folder = os.path.join(os.path.dirname(__file__), "images")
         os.makedirs(image_folder, exist_ok=True)
         
+        # Define the tile size to match our UI
+        tile_size = 68  # Same as in init_ui
+        
         # Create empty tile image if it doesn't exist
         empty_tile_path = os.path.join(image_folder, "empty.png")
         if not os.path.exists(empty_tile_path):
             try:
                 # Create a blank transparent image for empty tiles
-                empty_img = Image.new('RGBA', (80, 80), (205, 193, 180, 255))
+                empty_img = Image.new('RGBA', (tile_size, tile_size), (205, 193, 180, 255))
                 empty_img.save(empty_tile_path)
                 print(f"Created empty tile image at: {empty_tile_path}")
             except Exception as e:
@@ -243,7 +291,7 @@ class Game2048:
         # Load the empty tile image
         try:
             img = Image.open(empty_tile_path)
-            img = img.resize((80, 80), Image.Resampling.LANCZOS)
+            img = img.resize((tile_size, tile_size), Image.Resampling.LANCZOS)
             self.images[0] = ImageTk.PhotoImage(img)
             print("Successfully loaded empty tile image")
         except Exception as e:
@@ -266,7 +314,7 @@ class Game2048:
                 try:
                     # Load and resize the image to fit the tiles
                     img = Image.open(image_path)
-                    img = img.resize((80, 80), Image.Resampling.LANCZOS)
+                    img = img.resize((tile_size, tile_size), Image.Resampling.LANCZOS)
                     photo_img = ImageTk.PhotoImage(img)
                     self.images[value] = photo_img  # Store the PhotoImage
                     print(f"Successfully loaded image for tile {value}")
@@ -277,6 +325,23 @@ class Game2048:
     
     def update_ui(self):
         """Update the UI with current grid values, using images instead of text"""
+        # Precise measurements for grid alignment
+        # These values are carefully tuned to match the grid background
+        tile_size = 68  # Reduced to fit better within cells
+        
+        # Fixed positions for each cell in the grid
+        # These are manually tuned to match the grid background
+        grid_positions = [
+            # Row 1
+            [(25, 25), (117, 25), (209, 25), (280, 25)],
+            # Row 2
+            [(25, 117), (117, 117), (209, 117), (280, 117)],
+            # Row 3
+            [(25, 209), (117, 209), (209, 209), (280, 209)],
+            # Row 4
+            [(25, 280), (117, 280), (209, 280), (280, 280)]
+        ]
+        
         for i in range(4):
             for j in range(4):
                 value = self.grid[i, j]
@@ -284,8 +349,11 @@ class Game2048:
                     # Make empty tiles completely invisible
                     self.tiles[i][j].place_forget()  # Remove from view
                 else:
+                    # Use the pre-defined positions for precise placement
+                    x_pos, y_pos = grid_positions[i][j]
+                    
                     # Make sure the tile is visible and properly placed
-                    self.tiles[i][j].place(x=j*90+5, y=i*90+5, width=80, height=80)
+                    self.tiles[i][j].place(x=x_pos, y=y_pos, width=tile_size, height=tile_size)
                     
                     if value in self.images:
                         # Display the image for this value
