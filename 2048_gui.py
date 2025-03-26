@@ -199,11 +199,11 @@ class Game2048:
         self.score_frame.pack(fill="x", padx=20, pady=10)
         
         self.score_label = tk.Label(self.score_frame, text=f"Score: {self.current_score}", 
-                                   font=("Arial", 14, "bold"), bg="#bbada0", fg="#ffffff")
+                                   font=("Press Start 2P", 12), bg="#bbada0", fg="#ffffff")
         self.score_label.pack(side="left", padx=10)
         
         self.high_score_label = tk.Label(self.score_frame, text=f"Best: {self.high_score}", 
-                                        font=("Arial", 14, "bold"), bg="#bbada0", fg="#ffffff")
+                                        font=("Press Start 2P", 12), bg="#bbada0", fg="#ffffff")
         self.high_score_label.pack(side="right", padx=10)
         
         # Create tile labels with consistent size
@@ -230,7 +230,7 @@ class Game2048:
             row_tiles = []
             for j in range(4):
                 # Create tile labels that will overlay on the grid
-                tile = tk.Label(self.frame, text="", font=("Arial", 18, "bold"), 
+                tile = tk.Label(self.frame, text="", font=("Press Start 2P", 16), 
                               bg=self.empty_color, compound="center",
                               width=4, height=2, borderwidth=0, highlightthickness=0)
                 
@@ -246,23 +246,23 @@ class Game2048:
         self.bottom_frame.pack(fill="x", side="bottom", padx=20, pady=20)
         
         self.save_button = tk.Button(self.bottom_frame, text="Save Game", 
-                                    command=self.save_game, font=("Arial", 12),
+                                    command=self.save_game, font=("Press Start 2P", 10),
                                     bg="#8f7a66", fg="#ffffff")
         self.save_button.pack(side="left", padx=10)
         
         self.help_button = tk.Button(self.bottom_frame, text="Help", 
-                                    command=self.show_help, font=("Arial", 12),
+                                    command=self.show_help, font=("Press Start 2P", 10),
                                     bg="#8f7a66", fg="#ffffff")
         self.help_button.pack(side="left", padx=10)
         
         self.quit_button = tk.Button(self.bottom_frame, text="Quit", 
-                                    command=self.quit_game, font=("Arial", 12),
+                                    command=self.quit_game, font=("Press Start 2P", 10),
                                     bg="#8f7a66", fg="#ffffff")
         self.quit_button.pack(side="right", padx=10)
         
         # Music control
         self.music_button = tk.Button(self.bottom_frame, text="🔊", 
-                                     command=self.toggle_music, font=("Arial", 12),
+                                     command=self.toggle_music, font=("Press Start 2P", 10),
                                      bg="#8f7a66", fg="#ffffff", width=2)
         self.music_button.pack(side="right", padx=10)
         
@@ -360,7 +360,7 @@ class Game2048:
                         self.tiles[i][j].config(image=self.images[value], text="", bg=self.colors.get(value, "#cdc1b4"))
                     else:
                         # Fallback to text if image not available
-                        self.tiles[i][j].config(image="", text=str(value) if value else "", bg=self.colors.get(value, "#cdc1b4"))
+                        self.tiles[i][j].config(image="", text=str(value) if value else "", font=("Press Start 2P", 16), bg=self.colors.get(value, "#cdc1b4"))
         
         # Update score display
         self.score_label.config(text=f"Score: {self.current_score}")
@@ -574,19 +574,19 @@ class MainMenu:
         
         # High Score Display
         self.high_score_label = tk.Label(self.frame, text=f"High Score: {self.high_score}", 
-                                        font=("Arial", 16, "bold"), fg="#FFFFFF", bg="#000000")
+                                        font=("Press Start 2P", 14), fg="#FFFFFF", bg="#000000")
         self.high_score_label.pack(pady=20)
         
         # Title
         self.title_label = tk.Label(self.frame, text="2048 RETRO", 
-                                   font=("Arial", 36, "bold"), fg="#FFD700", bg="#000000")
+                                   font=("Press Start 2P", 28), fg="#FFD700", bg="#000000")
         self.title_label.pack(pady=20)
         
         # Main Menu Buttons
         button_frame = tk.Frame(self.frame, bg="#000000")
         button_frame.pack(pady=20)
         
-        button_style = {"font": ("Arial", 14), "width": 15, "height": 2, 
+        button_style = {"font": ("Press Start 2P", 12), "width": 15, "height": 2, 
                        "bg": "#333333", "fg": "#FFFFFF", "activebackground": "#555555"}
         
         self.new_game_button = tk.Button(button_frame, text="New Game", 
