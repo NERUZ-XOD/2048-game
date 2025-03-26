@@ -6,6 +6,7 @@ import os
 import json
 import pygame
 from tkinter import messagebox
+import tkinter.font as tkFont
 
 class Game2048:
     def __init__(self, master):
@@ -34,6 +35,9 @@ class Game2048:
         }
         
         self.load_sounds()
+        
+        # Load custom fonts
+        self.load_custom_fonts()
         
         # Background color for empty tiles
         self.empty_color = "#bbada0"
@@ -135,14 +139,14 @@ class Game2048:
         if not os.path.exists(bg_path):
             try:
                 # Create a basic grid background if one doesn't exist
-                bg_img = Image.new('RGBA', (370, 370), (187, 173, 160, 255))  # Main grid background color
+                bg_img = Image.new('RGBA', (400, 400), (187, 173, 160, 255))  # Main grid background color
                 
                 # Draw grid cells
                 for i in range(4):
                     for j in range(4):
                         # Create a rounded rectangle for each cell
-                        cell = Image.new('RGBA', (80, 80), (205, 193, 180, 255))  # Empty cell color
-                        bg_img.paste(cell, (j*90+5, i*90+5), mask=None)
+                        cell = Image.new('RGBA', (72, 72), (205, 193, 180, 255))  # Empty cell color
+                        bg_img.paste(cell, (j*92+25, i*92+25), mask=None)
                 
                 bg_img.save(bg_path)
                 print(f"Created grid background image at: {bg_path}")
@@ -175,7 +179,7 @@ class Game2048:
             img = img.crop((left, top, right, bottom))
             
             # Resize back to original dimensions
-            img = img.resize((370, 370), Image.Resampling.LANCZOS)
+            img = img.resize((400, 400), Image.Resampling.LANCZOS)
             
             self.grid_background = ImageTk.PhotoImage(img)
             print("Successfully loaded grid background image with zoom effect")
@@ -183,16 +187,35 @@ class Game2048:
             print(f"Error loading grid background: {e}")
             self.grid_background = None
     
+    def load_custom_fonts(self):
+        """Load and register custom fonts for the game"""
+        font_path = os.path.join(os.path.dirname(__file__), "fonts", "PressStart2P.ttf")
+        if os.path.exists(font_path):
+            try:
+                # Register the font with Tkinter
+                font_id = tkFont.Font(font=("TkDefaultFont", 10)).actual()["family"]
+                if "Press Start 2P" not in tkFont.families():
+                    tkFont.families()  # Initialize the font system
+                    self.window.tk.call('font', 'configure', font_id, '-family', "Press Start 2P")
+                    self.window.tk.call('lappend', 'auto_path', os.path.join(os.path.dirname(__file__), "fonts"))
+                    self.window.tk.call('lappend', 'auto_path', os.path.dirname(__file__))
+                    self.window.tk.call('font', 'create', "Press Start 2P")
+                    print("Custom font loaded successfully")
+            except Exception as e:
+                print(f"Error loading custom font: {e}")
+        else:
+            print(f"Font file not found: {font_path}")
+    
     def init_ui(self):
         # Create main frame for the game grid
-        self.frame = tk.Frame(self.window, bg="#bbada0", width=370, height=370)
+        self.frame = tk.Frame(self.window, bg="#bbada0", width=400, height=400)
         self.frame.pack(pady=20)
         self.frame.pack_propagate(False)  # Prevent frame from shrinking to fit children
         
         # Add grid background image first
         if hasattr(self, 'grid_background') and self.grid_background:
             self.bg_label = tk.Label(self.frame, image=self.grid_background, bg="#bbada0")
-            self.bg_label.place(x=0, y=0, width=370, height=370)
+            self.bg_label.place(x=0, y=0, width=400, height=400)
         
         # Score display
         self.score_frame = tk.Frame(self.window, bg="#bbada0")
@@ -211,19 +234,19 @@ class Game2048:
         
         # Precise measurements for grid alignment
         # These values are carefully tuned to match the grid background
-        tile_size = 68  # Reduced to fit better within cells
+        tile_size = 72  # Exact tile size as specified in memory
         
         # Fixed positions for each cell in the grid
-        # These are manually tuned to match the grid background
+        # These are manually tuned to match the grid background using the exact coordinates from memory
         grid_positions = [
             # Row 1
-            [(25, 25), (117, 25), (209, 25), (280, 25)],
+            [(25, 25), (117, 25), (209, 25), (301, 25)],
             # Row 2
-            [(25, 117), (117, 117), (209, 117), (280, 117)],
+            [(25, 117), (117, 117), (209, 117), (301, 117)],
             # Row 3
-            [(25, 209), (117, 209), (209, 209), (280, 209)],
+            [(25, 209), (117, 209), (209, 209), (301, 209)],
             # Row 4
-            [(25, 280), (117, 280), (209, 280), (280, 280)]
+            [(25, 301), (117, 301), (209, 301), (301, 301)]
         ]
         
         for i in range(4):
@@ -275,7 +298,7 @@ class Game2048:
         os.makedirs(image_folder, exist_ok=True)
         
         # Define the tile size to match our UI
-        tile_size = 68  # Same as in init_ui
+        tile_size = 72  # Updated to match the tile size in init_ui
         
         # Create empty tile image if it doesn't exist
         empty_tile_path = os.path.join(image_folder, "empty.png")
@@ -327,19 +350,19 @@ class Game2048:
         """Update the UI with current grid values, using images instead of text"""
         # Precise measurements for grid alignment
         # These values are carefully tuned to match the grid background
-        tile_size = 68  # Reduced to fit better within cells
+        tile_size = 72  # Updated to match the tile size in init_ui
         
         # Fixed positions for each cell in the grid
-        # These are manually tuned to match the grid background
+        # These are manually tuned to match the grid background using the exact coordinates from memory
         grid_positions = [
             # Row 1
-            [(25, 25), (117, 25), (209, 25), (280, 25)],
+            [(25, 25), (117, 25), (209, 25), (301, 25)],
             # Row 2
-            [(25, 117), (117, 117), (209, 117), (280, 117)],
+            [(25, 117), (117, 117), (209, 117), (301, 117)],
             # Row 3
-            [(25, 209), (117, 209), (209, 209), (280, 209)],
+            [(25, 209), (117, 209), (209, 209), (301, 209)],
             # Row 4
-            [(25, 280), (117, 280), (209, 280), (280, 280)]
+            [(25, 301), (117, 301), (209, 301), (301, 301)]
         ]
         
         for i in range(4):
@@ -569,6 +592,9 @@ class MainMenu:
         # Load high score
         self.high_score = self.load_high_score()
         
+        # Load custom fonts
+        self.load_custom_fonts()
+        
         # Load pixel art background if available
         self.load_background()
         
@@ -629,6 +655,25 @@ class MainMenu:
                 self.frame.lift()
             except Exception as e:
                 print(f"Error loading menu background: {e}")
+    
+    def load_custom_fonts(self):
+        """Load and register custom fonts for the menu"""
+        font_path = os.path.join(os.path.dirname(__file__), "fonts", "PressStart2P.ttf")
+        if os.path.exists(font_path):
+            try:
+                # Register the font with Tkinter
+                font_id = tkFont.Font(font=("TkDefaultFont", 10)).actual()["family"]
+                if "Press Start 2P" not in tkFont.families():
+                    tkFont.families()  # Initialize the font system
+                    self.master.tk.call('font', 'configure', font_id, '-family', "Press Start 2P")
+                    self.master.tk.call('lappend', 'auto_path', os.path.join(os.path.dirname(__file__), "fonts"))
+                    self.master.tk.call('lappend', 'auto_path', os.path.dirname(__file__))
+                    self.master.tk.call('font', 'create', "Press Start 2P")
+                    print("Custom font loaded successfully")
+            except Exception as e:
+                print(f"Error loading custom font: {e}")
+        else:
+            print(f"Font file not found: {font_path}")
     
     def load_high_score(self):
         """Load high score from file"""
