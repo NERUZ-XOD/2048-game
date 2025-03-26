@@ -1,5 +1,5 @@
 import tkinter as tk
-from PIL import Image, ImageTk  # You'll need to install Pillow: pip install Pillow
+from PIL import Image, ImageTk
 import numpy as np
 import random
 import os
@@ -7,6 +7,7 @@ import json
 import pygame
 from tkinter import messagebox
 import tkinter.font as tkFont
+import time
 
 class Game2048:
     def __init__(self, master):
@@ -22,6 +23,9 @@ class Game2048:
         
         # Initialize pygame for sound effects
         pygame.mixer.init()
+        
+        # Sound settings
+        self.music_on = True  # Default to having sound on
         
         # Load sound effects
         self.sound_folder = os.path.join(os.path.dirname(__file__), "sounds")
@@ -48,6 +52,24 @@ class Game2048:
             256: "#edcc61", 512: "#edc850", 1024: "#edc53f", 2048: "#edc22e"
         }
         
+        # Animation settings
+        self.animation_speed = 15  # ms between animation frames
+        self.animation_duration = 150  # total animation duration in ms
+        self.animation_frames = self.animation_duration // self.animation_speed
+        self.is_animating = False
+        self.animation_queue = []
+        self.last_grid = None
+        self.grid_positions = [
+            # Row 1
+            [(25, 25), (117, 25), (209, 25), (301, 25)],
+            # Row 2
+            [(25, 117), (117, 117), (209, 117), (301, 117)],
+            # Row 3
+            [(25, 209), (117, 209), (209, 209), (301, 209)],
+            # Row 4
+            [(25, 301), (117, 301), (209, 301), (301, 301)]
+        ]
+        
         # Load tile images and grid background before UI initialization
         self.images = {}
         self.load_grid_background()
@@ -56,11 +78,522 @@ class Game2048:
         # Initialize UI components
         self.init_ui()
         
-        self.spawn_tile()
-        self.spawn_tile()
+        self.spawn_tile(animate=False)
+        self.spawn_tile(animate=False)
         self.update_ui()
 
         self.window.bind("<Key>", self.handle_keypress)
+    
+    def init_ui(self):
+        # Create main frame for the game grid
+        self.frame = tk.Frame(self.window, bg="#bbada0", width=400, height=400)
+        self.frame.pack(pady=20)
+        self.frame.pack_propagate(False)  # Prevent frame from shrinking to fit children
+        
+        # Add grid background image first
+        if hasattr(self, 'grid_background') and self.grid_background:
+            self.bg_label = tk.Label(self.frame, image=self.grid_background, bg="#bbada0")
+            self.bg_label.place(x=0, y=0, width=400, height=400)
+        
+        # Score display
+        self.score_frame = tk.Frame(self.window, bg="#bbada0")
+        self.score_frame.pack(fill="x", padx=20, pady=10)
+        
+        self.score_label = tk.Label(self.score_frame, text=f"Score: {self.current_score}", 
+                                   font=("Press Start 2P", 12), bg="#bbada0", fg="#ffffff")
+        self.score_label.pack(side="left", padx=10)
+        
+        self.high_score_label = tk.Label(self.score_frame, text=f"Best: {self.high_score}", 
+                                        font=("Press Start 2P", 12), bg="#bbada0", fg="#ffffff")
+        self.high_score_label.pack(side="right", padx=10)
+        
+        # Create tile labels with consistent size
+        self.tiles = []
+        
+        # Precise measurements for grid alignment
+        # These values are carefully tuned to match the grid background
+        tile_size = 72  # Exact tile size as specified in memory
+        
+        # Fixed positions for each cell in the grid
+        # These are manually tuned to match the grid background using the exact coordinates from memory
+        
+        for i in range(4):
+            row_tiles = []
+            for j in range(4):
+                # Create tile labels that will overlay on the grid
+                tile = tk.Label(self.frame, text="", font=("Press Start 2P", 16), 
+                              bg=self.empty_color, compound="center",
+                              width=4, height=2, borderwidth=0, highlightthickness=0)
+                
+                # Use the pre-defined positions for precise placement
+                x_pos, y_pos = self.grid_positions[i][j]
+                
+                tile.place(x=x_pos, y=y_pos, width=tile_size, height=tile_size)
+                row_tiles.append(tile)
+            self.tiles.append(row_tiles)
+        
+        # Bottom menu
+        self.bottom_frame = tk.Frame(self.window, bg="#bbada0")
+        self.bottom_frame.pack(fill="x", side="bottom", padx=20, pady=20)
+        
+        self.save_button = tk.Button(self.bottom_frame, text="Save Game", 
+                                    command=self.save_game, font=("Press Start 2P", 10),
+                                    bg="#8f7a66", fg="#ffffff")
+        self.save_button.pack(side="left", padx=10)
+        
+        self.help_button = tk.Button(self.bottom_frame, text="Help", 
+                                    command=self.show_help, font=("Press Start 2P", 10),
+                                    bg="#8f7a66", fg="#ffffff")
+        self.help_button.pack(side="left", padx=10)
+        
+        self.quit_button = tk.Button(self.bottom_frame, text="Quit", 
+                                    command=self.quit_game, font=("Press Start 2P", 10),
+                                    bg="#8f7a66", fg="#ffffff")
+        self.quit_button.pack(side="right", padx=10)
+        
+        # Music control
+        self.music_button = tk.Button(self.bottom_frame, text="🔊", 
+                                     command=self.toggle_music, font=("Press Start 2P", 10),
+                                     bg="#8f7a66", fg="#ffffff", width=2)
+        self.music_button.pack(side="right", padx=10)
+        
+    def update_ui(self):
+        """Update the UI with current grid values, using images instead of text"""
+        # Precise measurements for grid alignment
+        # These values are carefully tuned to match the grid background
+        tile_size = 72  # Updated to match the tile size in init_ui
+        
+        for i in range(4):
+            for j in range(4):
+                value = self.grid[i, j]
+                if value == 0:
+                    # Make empty tiles completely invisible
+                    self.tiles[i][j].place_forget()  # Remove from view
+                else:
+                    # Use the pre-defined positions for precise placement
+                    x_pos, y_pos = self.grid_positions[i][j]
+                    
+                    # Make sure the tile is visible and properly placed
+                    self.tiles[i][j].place(x=x_pos, y=y_pos, width=tile_size, height=tile_size)
+                    
+                    if value in self.images:
+                        # Display the image for this value
+                        self.tiles[i][j].config(image=self.images[value], text="", bg=self.colors.get(value, "#cdc1b4"))
+                    else:
+                        # Fallback to text if image not available
+                        self.tiles[i][j].config(image="", text=str(value) if value else "", font=("Press Start 2P", 16), bg=self.colors.get(value, "#cdc1b4"))
+        
+        # Update score display
+        self.score_label.config(text=f"Score: {self.current_score}")
+        self.high_score_label.config(text=f"Best: {self.high_score}")
+        
+        self.window.update_idletasks()
+
+    def spawn_tile(self, animate=True):
+        empty_cells = [(r, c) for r in range(4) for c in range(4) if self.grid[r, c] == 0]
+        if empty_cells:
+            r, c = random.choice(empty_cells)
+            value = 2 if random.random() < 0.9 else 4
+            self.grid[r, c] = value
+            
+            if animate:
+                self.animate_spawn(r, c, value)
+    
+    def animate_spawn(self, row, col, value):
+        """Animate a new tile spawning with a retro pixel-like fade in"""
+        if not hasattr(self, 'tiles') or row >= len(self.tiles) or col >= len(self.tiles[0]):
+            return
+            
+        tile = self.tiles[row][col]
+        x_pos, y_pos = self.grid_positions[row][col]
+        tile_size = 72
+        
+        # Configure the tile with the correct image/value
+        if value in self.images:
+            tile.config(image=self.images[value], text="", bg=self.colors.get(value, "#cdc1b4"))
+        else:
+            tile.config(image="", text=str(value), bg=self.colors.get(value, "#cdc1b4"))
+        
+        # Start with a small tile
+        start_size = 10
+        tile.place(x=x_pos + (tile_size - start_size) // 2, 
+                  y=y_pos + (tile_size - start_size) // 2, 
+                  width=start_size, height=start_size)
+        
+        # Animate the growth
+        def grow_tile(current_size, step=0):
+            if step >= 5:  # 5 frames for the grow animation
+                # Final position and size
+                tile.place(x=x_pos, y=y_pos, width=tile_size, height=tile_size)
+                return
+            
+            # Calculate new size with a retro step-like growth (not smooth)
+            new_size = start_size + (tile_size - start_size) * (step + 1) // 5
+            
+            # Update position to keep centered
+            new_x = x_pos + (tile_size - new_size) // 2
+            new_y = y_pos + (tile_size - new_size) // 2
+            
+            tile.place(x=new_x, y=new_y, width=new_size, height=new_size)
+            
+            # Schedule next frame
+            self.window.after(30, grow_tile, new_size, step + 1)
+        
+        # Start the animation
+        grow_tile(start_size)
+    
+    def move(self, direction):
+        """Handle tile movement in the specified direction"""
+        if self.is_animating:
+            return  # Don't process moves during animation
+            
+        # Store the original grid for comparison and animation
+        original_grid = self.grid.copy()
+        self.last_grid = original_grid.copy()
+        
+        # Process the move logic based on direction
+        moved = False
+        merged_positions = []
+        
+        if direction == 'up':
+            # Transpose to work with columns as rows
+            self.grid = self.grid.T
+            for i in range(4):
+                result, merged = self.process_row(self.grid[i])
+                if result:
+                    moved = True
+                    merged_positions.extend([(pos, i) for pos in merged])
+            # Transpose back
+            self.grid = self.grid.T
+            # Correct merged positions after transposition
+            merged_positions = [(col, row) for row, col in merged_positions]
+            
+        elif direction == 'down':
+            # Transpose to work with columns as rows
+            self.grid = self.grid.T
+            for i in range(4):
+                # Reverse the row, process it, then reverse back
+                row = self.grid[i][::-1]
+                result, merged = self.process_row(row)
+                if result:
+                    moved = True
+                    # Adjust positions for reversed row (3-pos for 0-based indexing)
+                    merged_positions.extend([(3 - pos, i) for pos in merged])
+                # Put the processed row back in the grid (reversed again)
+                self.grid[i] = row[::-1]
+            # Transpose back
+            self.grid = self.grid.T
+            # Correct merged positions after transposition
+            merged_positions = [(col, row) for row, col in merged_positions]
+            
+        elif direction == 'left':
+            for i in range(4):
+                result, merged = self.process_row(self.grid[i])
+                if result:
+                    moved = True
+                    merged_positions.extend([(i, pos) for pos in merged])
+                    
+        elif direction == 'right':
+            for i in range(4):
+                # Reverse the row, process it, then reverse back
+                row = self.grid[i][::-1]
+                result, merged = self.process_row(row)
+                if result:
+                    moved = True
+                    # Adjust positions for reversed row
+                    merged_positions.extend([(i, 3 - pos) for pos in merged])
+                # Put the processed row back in the grid (reversed again)
+                self.grid[i] = row[::-1]
+        
+        # Check if the grid changed
+        if moved:
+            self.play_sound('move')
+            
+            # Find differences between old and new grid for animation
+            movements = self.calculate_movements(original_grid, self.grid)
+            
+            # Animate the movements
+            self.animate_grid_change(movements, merged_positions, direction)
+            
+            # Spawn a new tile after movement
+            self.spawn_tile()
+            
+            # Update high score if current score is higher
+            if self.current_score > self.high_score:
+                self.high_score = self.current_score
+                self.save_high_score()
+            
+            # Check if game is over
+            if self.is_game_over():
+                self.play_sound('game_over')
+                self.show_game_over()
+        else:
+            # If grid didn't change, ensure UI is still updated
+            self.update_ui()
+    
+    def process_row(self, row):
+        """Process a single row for movement and merging"""
+        original = row.copy()
+        # First compression
+        row_compressed = self.compress(row)
+        # Merge
+        row_merged, merged_positions = self.merge_with_tracking(row_compressed)
+        # Second compression
+        row_final = self.compress(row_merged)
+        
+        # Update the row in place
+        row[:] = row_final
+        
+        # Return whether the row changed and merged positions
+        return not np.array_equal(original, row_final), merged_positions
+    
+    def calculate_movements(self, old_grid, new_grid):
+        """Calculate tile movements between old and new grid states"""
+        movements = []
+        
+        # Create dictionaries of values and their positions in old and new grids
+        old_positions = {}
+        for i in range(4):
+            for j in range(4):
+                if old_grid[i, j] != 0:
+                    value = old_grid[i, j]
+                    if value not in old_positions:
+                        old_positions[value] = []
+                    old_positions[value].append((i, j))
+        
+        new_positions = {}
+        for i in range(4):
+            for j in range(4):
+                if new_grid[i, j] != 0:
+                    value = new_grid[i, j]
+                    if value not in new_positions:
+                        new_positions[value] = []
+                    new_positions[value].append((i, j))
+        
+        # Match tiles from old to new positions
+        for value in old_positions:
+            if value in new_positions:
+                # Simple case: same number of tiles with this value
+                if len(old_positions[value]) == len(new_positions[value]):
+                    # For simplicity, match old and new positions in order
+                    # This isn't perfect but works for most cases
+                    for old_pos, new_pos in zip(old_positions[value], new_positions[value]):
+                        if old_pos != new_pos:  # Only track actual movements
+                            movements.append((old_pos, new_pos))
+                else:
+                    # More complex case: tiles merged or new tiles appeared
+                    # Match as many as possible
+                    for old_pos in old_positions[value]:
+                        if new_positions[value]:  # If there are still new positions available
+                            new_pos = new_positions[value].pop(0)
+                            if old_pos != new_pos:  # Only track actual movements
+                                movements.append((old_pos, new_pos))
+        
+        return movements
+    
+    def animate_grid_change(self, movements, merged_positions, direction):
+        """Animate the entire grid change including movements and merges"""
+        self.is_animating = True
+        tile_size = 72
+        
+        # If no movements, skip directly to spawning a tile
+        if not movements:
+            self.spawn_tile()
+            self.update_ui()
+            self.is_animating = False
+            return
+        
+        # Hide all tiles initially - we'll show them in their animated positions
+        for i in range(4):
+            for j in range(4):
+                self.tiles[i][j].place_forget()
+        
+        # Create temporary labels for moving tiles
+        temp_tiles = []
+        
+        # Create a temporary label for each movement
+        for (src_row, src_col), (dst_row, dst_col) in movements:
+            if self.last_grid[src_row, src_col] == 0:
+                continue  # Skip empty tiles
+                
+            # Get the value from the original grid
+            value = self.last_grid[src_row, src_col]
+            
+            # Create a temporary tile for animation
+            temp_tile = tk.Label(self.frame, font=("Press Start 2P", 16), 
+                              compound="center", borderwidth=0, highlightthickness=0)
+            
+            # Configure with image or text
+            if value in self.images:
+                temp_tile.config(image=self.images[value], text="", bg=self.colors.get(value, "#cdc1b4"))
+            else:
+                temp_tile.config(image="", text=str(value), bg=self.colors.get(value, "#cdc1b4"))
+            
+            # Position at source
+            src_x, src_y = self.grid_positions[src_row][src_col]
+            temp_tile.place(x=src_x, y=src_y, width=tile_size, height=tile_size)
+            
+            # Calculate destination
+            dst_x, dst_y = self.grid_positions[dst_row][dst_col]
+            
+            # Store for animation
+            temp_tiles.append((temp_tile, src_x, src_y, dst_x, dst_y, dst_row, dst_col))
+        
+        # Function to update positions for one frame
+        def update_positions(step):
+            if step >= 8:  # 8 frames for movement (retro-style step animation)
+                # Animation complete, clean up
+                for temp_tile, _, _, _, _, _, _ in temp_tiles:
+                    temp_tile.destroy()
+                
+                # Spawn a new tile and update UI
+                self.spawn_tile()
+                
+                # Force a full UI update to ensure all tiles are properly visible
+                self.update_ui()
+                
+                # Animate merges
+                if merged_positions:
+                    self.animate_merges(merged_positions)
+                else:
+                    # No merges to animate, so we're done
+                    self.is_animating = False
+                return
+            
+            # Update position of each temporary tile
+            for temp_tile, src_x, src_y, dst_x, dst_y, _, _ in temp_tiles:
+                # Calculate new position with a retro step-like movement
+                progress = (step + 1) / 8
+                
+                # Use step function for retro feel (not smooth)
+                new_x = src_x + int((dst_x - src_x) * progress)
+                new_y = src_y + int((dst_y - src_y) * progress)
+                
+                # Apply pixelated movement effect by rounding to nearest multiple of 4
+                new_x = (new_x // 4) * 4
+                new_y = (new_y // 4) * 4
+                
+                temp_tile.place(x=new_x, y=new_y, width=tile_size, height=tile_size)
+            
+            # Schedule next frame
+            self.window.after(20, update_positions, step + 1)
+        
+        # Start the animation
+        update_positions(0)
+    
+    def animate_merges(self, merged_positions):
+        """Animate tile merges with a retro popping effect"""
+        if not merged_positions:
+            self.is_animating = False
+            return
+            
+        tile_size = 72
+        
+        # Count for tracking when all animations are complete
+        self.merge_animations_count = len(merged_positions)
+        self.completed_merge_animations = 0
+        
+        # For each merged tile position
+        for row, col in merged_positions:
+            if row >= len(self.tiles) or col >= len(self.tiles[0]):
+                self.completed_merge_animations += 1
+                continue
+                
+            tile = self.tiles[row][col]
+            value = self.grid[row, col]
+            
+            if value == 0:
+                self.completed_merge_animations += 1
+                continue
+                
+            x_pos, y_pos = self.grid_positions[row][col]
+            
+            # Configure with correct image/value
+            if value in self.images:
+                tile.config(image=self.images[value], text="", bg=self.colors.get(value, "#cdc1b4"))
+            else:
+                tile.config(image="", text=str(value), bg=self.colors.get(value, "#cdc1b4"))
+            
+            # Make sure the tile is visible
+            tile.place(x=x_pos, y=y_pos, width=tile_size, height=tile_size)
+            
+            # Play merge sound
+            self.play_sound('merge')
+            
+            # Animate the merge with a pop effect
+            def pop_effect(tile, step=0):
+                if step >= 6:  # 6 frames for pop animation
+                    # Reset to normal size
+                    tile.place(x=x_pos, y=y_pos, width=tile_size, height=tile_size)
+                    
+                    # Increment completed animations counter
+                    self.completed_merge_animations += 1
+                    
+                    # Check if this was the last animation
+                    if self.completed_merge_animations >= self.merge_animations_count:
+                        self.is_animating = False
+                        # One final UI update to ensure everything is visible
+                        self.update_ui()
+                    return
+                
+                # Pop effect: grow slightly then shrink back
+                if step < 3:
+                    # Growing phase
+                    scale = 1.0 + (step + 1) * 0.1  # Grow up to 30% larger
+                else:
+                    # Shrinking phase
+                    scale = 1.3 - (step - 2) * 0.1  # Shrink back to normal
+                
+                # Calculate new size and position
+                new_size = int(tile_size * scale)
+                new_x = x_pos - (new_size - tile_size) // 2
+                new_y = y_pos - (new_size - tile_size) // 2
+                
+                # Update tile
+                tile.place(x=new_x, y=new_y, width=new_size, height=new_size)
+                
+                # Schedule next frame
+                self.window.after(30, pop_effect, tile, step + 1)
+            
+            # Start the animation
+            pop_effect(tile)
+        
+        # If no valid animations were started, reset the flag
+        if self.completed_merge_animations >= self.merge_animations_count:
+            self.is_animating = False
+            # One final UI update to ensure everything is visible
+            self.update_ui()
+    
+    def handle_keypress(self, event):
+        """Handle keyboard input for game controls"""
+        if self.is_animating:
+            return  # Ignore keypresses during animation
+        
+        key = event.keysym.lower()  # Convert to lowercase for case-insensitive matching
+        
+        # Movement controls
+        if key in ("up", "w", "k"):  # Added 'k' for vim-style controls
+            self.move('up')
+        elif key in ("down", "s", "j"):  # Added 'j' for vim-style controls
+            self.move('down')
+        elif key in ("left", "a", "h"):  # Added 'h' for vim-style controls
+            self.move('left')
+        elif key in ("right", "d", "l"):  # Added 'l' for vim-style controls
+            self.move('right')
+        
+        # Game controls
+        elif key == "r":  # Restart game
+            self.restart_game()
+        elif key == "q":  # Quit game
+            self.quit_game()
+        elif key == "m":  # Toggle music/sound
+            self.toggle_music()
+        elif key == "h":  # Show help
+            self.show_help()
+        elif key == "f1":  # Alternative help key
+            self.show_help()
+        elif key == "escape":  # Show menu/pause
+            self.show_menu()
     
     def load_high_score(self):
         """Load high score from file"""
@@ -123,11 +656,14 @@ class Game2048:
     
     def play_sound(self, sound_key):
         """Play a sound effect"""
-        if hasattr(self, 'music_on') and self.music_on and sound_key in self.sounds and self.sounds[sound_key]:
-            try:
-                self.sounds[sound_key].play()
-            except Exception as e:
-                print(f"Error playing sound {sound_key}: {e}")
+        # Check if sound exists and is enabled
+        if sound_key in self.sounds and self.sounds[sound_key] is not None:
+            # Only check music_on if it exists, otherwise default to playing sound
+            if not hasattr(self, 'music_on') or self.music_on:
+                try:
+                    self.sounds[sound_key].play()
+                except Exception as e:
+                    print(f"Error playing sound {sound_key}: {e}")
     
     def load_grid_background(self):
         """Load grid background image"""
@@ -206,91 +742,6 @@ class Game2048:
         else:
             print(f"Font file not found: {font_path}")
     
-    def init_ui(self):
-        # Create main frame for the game grid
-        self.frame = tk.Frame(self.window, bg="#bbada0", width=400, height=400)
-        self.frame.pack(pady=20)
-        self.frame.pack_propagate(False)  # Prevent frame from shrinking to fit children
-        
-        # Add grid background image first
-        if hasattr(self, 'grid_background') and self.grid_background:
-            self.bg_label = tk.Label(self.frame, image=self.grid_background, bg="#bbada0")
-            self.bg_label.place(x=0, y=0, width=400, height=400)
-        
-        # Score display
-        self.score_frame = tk.Frame(self.window, bg="#bbada0")
-        self.score_frame.pack(fill="x", padx=20, pady=10)
-        
-        self.score_label = tk.Label(self.score_frame, text=f"Score: {self.current_score}", 
-                                   font=("Press Start 2P", 12), bg="#bbada0", fg="#ffffff")
-        self.score_label.pack(side="left", padx=10)
-        
-        self.high_score_label = tk.Label(self.score_frame, text=f"Best: {self.high_score}", 
-                                        font=("Press Start 2P", 12), bg="#bbada0", fg="#ffffff")
-        self.high_score_label.pack(side="right", padx=10)
-        
-        # Create tile labels with consistent size
-        self.tiles = []
-        
-        # Precise measurements for grid alignment
-        # These values are carefully tuned to match the grid background
-        tile_size = 72  # Exact tile size as specified in memory
-        
-        # Fixed positions for each cell in the grid
-        # These are manually tuned to match the grid background using the exact coordinates from memory
-        grid_positions = [
-            # Row 1
-            [(25, 25), (117, 25), (209, 25), (301, 25)],
-            # Row 2
-            [(25, 117), (117, 117), (209, 117), (301, 117)],
-            # Row 3
-            [(25, 209), (117, 209), (209, 209), (301, 209)],
-            # Row 4
-            [(25, 301), (117, 301), (209, 301), (301, 301)]
-        ]
-        
-        for i in range(4):
-            row_tiles = []
-            for j in range(4):
-                # Create tile labels that will overlay on the grid
-                tile = tk.Label(self.frame, text="", font=("Press Start 2P", 16), 
-                              bg=self.empty_color, compound="center",
-                              width=4, height=2, borderwidth=0, highlightthickness=0)
-                
-                # Use the pre-defined positions for precise placement
-                x_pos, y_pos = grid_positions[i][j]
-                
-                tile.place(x=x_pos, y=y_pos, width=tile_size, height=tile_size)
-                row_tiles.append(tile)
-            self.tiles.append(row_tiles)
-        
-        # Bottom menu
-        self.bottom_frame = tk.Frame(self.window, bg="#bbada0")
-        self.bottom_frame.pack(fill="x", side="bottom", padx=20, pady=20)
-        
-        self.save_button = tk.Button(self.bottom_frame, text="Save Game", 
-                                    command=self.save_game, font=("Press Start 2P", 10),
-                                    bg="#8f7a66", fg="#ffffff")
-        self.save_button.pack(side="left", padx=10)
-        
-        self.help_button = tk.Button(self.bottom_frame, text="Help", 
-                                    command=self.show_help, font=("Press Start 2P", 10),
-                                    bg="#8f7a66", fg="#ffffff")
-        self.help_button.pack(side="left", padx=10)
-        
-        self.quit_button = tk.Button(self.bottom_frame, text="Quit", 
-                                    command=self.quit_game, font=("Press Start 2P", 10),
-                                    bg="#8f7a66", fg="#ffffff")
-        self.quit_button.pack(side="right", padx=10)
-        
-        # Music control
-        self.music_button = tk.Button(self.bottom_frame, text="🔊", 
-                                     command=self.toggle_music, font=("Press Start 2P", 10),
-                                     bg="#8f7a66", fg="#ffffff", width=2)
-        self.music_button.pack(side="right", padx=10)
-        
-        self.music_on = True
-
     def load_images(self):
         """Load all tile images from the images folder"""
         # Path to images folder - create if it doesn't exist
@@ -346,57 +797,6 @@ class Game2048:
             else:
                 print(f"Image file not found: {image_path}")
     
-    def update_ui(self):
-        """Update the UI with current grid values, using images instead of text"""
-        # Precise measurements for grid alignment
-        # These values are carefully tuned to match the grid background
-        tile_size = 72  # Updated to match the tile size in init_ui
-        
-        # Fixed positions for each cell in the grid
-        # These are manually tuned to match the grid background using the exact coordinates from memory
-        grid_positions = [
-            # Row 1
-            [(25, 25), (117, 25), (209, 25), (301, 25)],
-            # Row 2
-            [(25, 117), (117, 117), (209, 117), (301, 117)],
-            # Row 3
-            [(25, 209), (117, 209), (209, 209), (301, 209)],
-            # Row 4
-            [(25, 301), (117, 301), (209, 301), (301, 301)]
-        ]
-        
-        for i in range(4):
-            for j in range(4):
-                value = self.grid[i, j]
-                if value == 0:
-                    # Make empty tiles completely invisible
-                    self.tiles[i][j].place_forget()  # Remove from view
-                else:
-                    # Use the pre-defined positions for precise placement
-                    x_pos, y_pos = grid_positions[i][j]
-                    
-                    # Make sure the tile is visible and properly placed
-                    self.tiles[i][j].place(x=x_pos, y=y_pos, width=tile_size, height=tile_size)
-                    
-                    if value in self.images:
-                        # Display the image for this value
-                        self.tiles[i][j].config(image=self.images[value], text="", bg=self.colors.get(value, "#cdc1b4"))
-                    else:
-                        # Fallback to text if image not available
-                        self.tiles[i][j].config(image="", text=str(value) if value else "", font=("Press Start 2P", 16), bg=self.colors.get(value, "#cdc1b4"))
-        
-        # Update score display
-        self.score_label.config(text=f"Score: {self.current_score}")
-        self.high_score_label.config(text=f"Best: {self.high_score}")
-        
-        self.window.update_idletasks()
-
-    def spawn_tile(self):
-        empty_cells = [(r, c) for r in range(4) for c in range(4) if self.grid[r, c] == 0]
-        if empty_cells:
-            r, c = random.choice(empty_cells)
-            self.grid[r, c] = 2 if random.random() < 0.9 else 4
-    
     def compress(self, row):
         # Fix: NumPy arrays don't have count() method
         # Convert row to list, count zeros, then create new row
@@ -405,59 +805,19 @@ class Game2048:
         new_row = [num for num in row_list if num != 0] + [0] * zero_count
         return np.array(new_row)
     
-    def merge(self, row):
+    def merge_with_tracking(self, row):
+        """Modified merge function that tracks which positions had merges"""
+        merged_positions = []
         for i in range(3):
             if row[i] == row[i+1] and row[i] != 0:
                 row[i] *= 2
                 row[i+1] = 0
                 self.current_score += row[i]  # Update score when tiles merge
+                merged_positions.append(i)  # Track the position where merge happened
                 if row[i] == 2048:
                     self.show_win_message()
                 self.play_sound('merge')
-        return row
-
-    def move(self, direction):
-        original_grid = self.grid.copy()
-        if direction == 'up':
-            self.grid = self.grid.T
-            for i in range(4):
-                self.grid[i] = self.compress(self.grid[i])
-                self.grid[i] = self.merge(self.grid[i])
-                self.grid[i] = self.compress(self.grid[i])
-            self.grid = self.grid.T
-        elif direction == 'down':
-            self.grid = self.grid.T
-            for i in range(4):
-                self.grid[i] = self.compress(self.grid[i][::-1])[::-1]
-                self.grid[i] = self.merge(self.grid[i][::-1])[::-1]
-                self.grid[i] = self.compress(self.grid[i][::-1])[::-1]
-            self.grid = self.grid.T
-        elif direction == 'left':
-            for i in range(4):
-                self.grid[i] = self.compress(self.grid[i])
-                self.grid[i] = self.merge(self.grid[i])
-                self.grid[i] = self.compress(self.grid[i])
-        elif direction == 'right':
-            for i in range(4):
-                self.grid[i] = self.compress(self.grid[i][::-1])[::-1]
-                self.grid[i] = self.merge(self.grid[i][::-1])[::-1]
-                self.grid[i] = self.compress(self.grid[i][::-1])[::-1]
-        
-        # Check if the grid changed
-        if not np.array_equal(original_grid, self.grid):
-            self.play_sound('move')
-            self.spawn_tile()
-            self.update_ui()
-            
-            # Update high score if current score is higher
-            if self.current_score > self.high_score:
-                self.high_score = self.current_score
-                self.save_high_score()
-            
-            # Check if game is over
-            if self.is_game_over():
-                self.play_sound('game_over')
-                self.show_game_over()
+        return row, merged_positions
     
     def is_game_over(self):
         # Check if there are any empty cells
@@ -493,12 +853,17 @@ class Game2048:
     def restart_game(self):
         self.grid = np.zeros((4, 4), dtype=int)
         self.current_score = 0
-        self.spawn_tile()
-        self.spawn_tile()
+        self.is_animating = False  # Reset animation flag
+        self.spawn_tile(animate=False)
+        self.spawn_tile(animate=False)
         self.update_ui()
     
     def save_game(self):
         """Save the current game state"""
+        # Don't save during animation
+        if self.is_animating:
+            return
+            
         # Convert NumPy arrays and int64 values to standard Python types
         grid_list = [[int(cell) for cell in row] for row in self.grid.tolist()]
         
@@ -524,6 +889,7 @@ class Game2048:
             self.grid = np.array(game_state['grid'], dtype=int)
             self.current_score = int(game_state['score'])
             self.high_score = int(game_state['high_score'])
+            self.is_animating = False  # Reset animation flag
             self.update_ui()
             messagebox.showinfo("Game Loaded", "Your saved game has been loaded successfully!")
             return True
@@ -553,17 +919,20 @@ class Game2048:
         messagebox.showinfo("How to Play", help_text)
     
     def toggle_music(self):
-        """Toggle music on/off"""
+        """Toggle music/sound effects on/off"""
+        if not hasattr(self, 'music_on'):
+            self.music_on = True
+        
         self.music_on = not self.music_on
-        if self.music_on:
-            self.music_button.config(text="🔊")
-            # Resume music if it was playing
-        else:
-            self.music_button.config(text="🔇")
-            # Pause music if it was playing
+        status = "ON" if self.music_on else "OFF"
+        messagebox.showinfo("Sound", f"Sound effects are now {status}")
     
     def quit_game(self):
         """Exit to main menu"""
+        # Don't allow quitting during animation
+        if self.is_animating:
+            return
+            
         if messagebox.askyesno("Quit Game", "Are you sure you want to quit? Your progress will be lost unless saved."):
             self.window.destroy()
             root = tk.Tk()
@@ -571,16 +940,53 @@ class Game2048:
             root.geometry("400x600")
             MainMenu(root)
     
-    def handle_keypress(self, event):
-        if event.keysym in ("Up", "w"):
-            self.move('up')
-        elif event.keysym in ("Down", "s"):
-            self.move('down')
-        elif event.keysym in ("Left", "a"):
-            self.move('left')
-        elif event.keysym in ("Right", "d"):
-            self.move('right')
-
+    def show_menu(self):
+        """Show a simple in-game menu"""
+        if self.is_animating:
+            return
+            
+        menu = tk.Toplevel(self.window)
+        menu.title("Game Menu")
+        menu.geometry("250x300")
+        menu.resizable(False, False)
+        menu.configure(bg="#333333")
+        
+        # Center the menu on the screen
+        menu.transient(self.window)
+        menu.grab_set()
+        
+        # Title
+        title_label = tk.Label(menu, text="MENU", font=("Press Start 2P", 16), 
+                              fg="#FFFFFF", bg="#333333")
+        title_label.pack(pady=15)
+        
+        # Buttons
+        button_style = {"font": ("Press Start 2P", 10), "width": 15, "height": 1, 
+                       "bg": "#555555", "fg": "#FFFFFF", "activebackground": "#777777"}
+        
+        resume_button = tk.Button(menu, text="Resume", command=menu.destroy, **button_style)
+        resume_button.pack(pady=5)
+        
+        restart_button = tk.Button(menu, text="Restart", 
+                                  command=lambda: [menu.destroy(), self.restart_game()], **button_style)
+        restart_button.pack(pady=5)
+        
+        sound_text = "Sound: ON" if hasattr(self, 'music_on') and self.music_on else "Sound: OFF"
+        sound_button = tk.Button(menu, text=sound_text, 
+                               command=lambda: [menu.destroy(), self.toggle_music()], **button_style)
+        sound_button.pack(pady=5)
+        
+        help_button = tk.Button(menu, text="Help", 
+                              command=lambda: [menu.destroy(), self.show_help()], **button_style)
+        help_button.pack(pady=5)
+        
+        save_button = tk.Button(menu, text="Save Game", 
+                              command=lambda: [menu.destroy(), self.save_game()], **button_style)
+        save_button.pack(pady=5)
+        
+        quit_button = tk.Button(menu, text="Quit", 
+                              command=lambda: [menu.destroy(), self.quit_game()], **button_style)
+        quit_button.pack(pady=5)
 
 class MainMenu:
     def __init__(self, master):
@@ -712,7 +1118,7 @@ class MainMenu:
         - 🔊: Toggle sound on/off
         """
         messagebox.showinfo("How to Play", help_text)
-
+    
     def exit_game(self):
         self.master.quit()
 
