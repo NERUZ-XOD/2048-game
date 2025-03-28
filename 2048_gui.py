@@ -10,12 +10,23 @@ import tkinter.font as tkFont
 import time
 import sys
 
+# Function to set the window icon
+def set_window_icon(window):
+    """Set the window icon for a Tkinter window"""
+    icon_path = os.path.join(os.path.dirname(__file__), "images", "logo.ico")
+    if os.path.exists(icon_path):
+        try:
+            window.iconbitmap(icon_path)
+        except tk.TclError as e:
+            print(f"Could not set window icon: {e}")
+
 class Game2048:
     def __init__(self, master):
         self.window = master
-        self.window.title("2048 Retro Game")
+        self.window.title("2048 Game")
         self.window.geometry("400x600")
         self.window.resizable(False, False)  # Disable resizing
+        set_window_icon(self.window)
         self.grid = np.zeros((4, 4), dtype=int)
         
         # Score tracking
@@ -129,7 +140,17 @@ class Game2048:
         # Add a neon border to the score frame
         score_canvas = tk.Canvas(self.score_frame, bg="#222233", height=40, highlightthickness=0)
         score_canvas.pack(fill="x", expand=True)
-        score_canvas.create_rectangle(2, 2, 398, 38, outline="#00FFFF", width=2)
+        
+        # Use update_idletasks to ensure the canvas has been drawn before getting its width
+        score_canvas.update_idletasks()
+        canvas_width = score_canvas.winfo_width()
+        
+        # If the canvas width is too small (hasn't been fully rendered yet), use a reasonable default
+        if canvas_width < 10:
+            canvas_width = 360  # Default width
+            
+        # Create the rectangle with dynamic width
+        score_canvas.create_rectangle(2, 2, canvas_width-2, 38, outline="#00FFFF", width=2)
         
         # Score labels with neon styling
         self.score_label = tk.Label(score_canvas, text=f"Score: {self.current_score}", 
@@ -1288,7 +1309,7 @@ class Game2048:
         
         # Success message
         message_label = tk.Label(content_frame, text="Your saved game has been\nloaded successfully!", 
-                               font=("Press Start 2P", 10), fg="#CCCCCC", bg="#000000",
+                               font=("Press Start 2P", 8), fg="#00FFFF", bg="#000000",
                                justify=tk.CENTER)
         message_label.pack(pady=20)
         
@@ -1351,7 +1372,7 @@ class Game2048:
         
         # Message
         message_label = tk.Label(content_frame, text="No saved game found.\nStarting a new game.", 
-                               font=("Press Start 2P", 10), fg="#CCCCCC", bg="#000000",
+                               font=("Press Start 2P", 10), fg="#00FFFF", bg="#000000",
                                justify=tk.CENTER)
         message_label.pack(pady=20)
         
@@ -1600,7 +1621,7 @@ class Game2048:
         # Warning message
         message_label = tk.Label(content_frame, 
                                text="Are you sure you want to quit?\nYour progress will be lost\nunless saved.", 
-                               font=("Press Start 2P", 10), fg="#CCCCCC", bg="#000000",
+                               font=("Press Start 2P", 8), fg="#00FFFF", bg="#000000",
                                justify=tk.CENTER)
         message_label.pack(pady=15)
         
@@ -1629,8 +1650,9 @@ class Game2048:
         """Actually quit the game after confirmation"""
         self.window.destroy()
         root = tk.Tk()
-        root.title("2048 Retro Game")
+        root.title("2048 Game")
         root.geometry("400x600")
+        set_window_icon(root)
         MainMenu(root)
         root.mainloop()
     
@@ -1688,7 +1710,10 @@ class Game2048:
 class MainMenu:
     def __init__(self, master):
         self.master = master
-        self.master.title("2048 Retro Game")
+        self.master.title("2048 Game")
+        self.master.geometry("400x600")
+        self.master.resizable(False, False)  # Disable resizing
+        set_window_icon(self.master)
         
         # Create a frame for the background
         self.frame = tk.Canvas(master, width=400, height=600, highlightthickness=0)
@@ -1897,30 +1922,115 @@ class MainMenu:
             pass
 
     def show_how_to_play(self):
-        help_text = """
-        How to Play 2048:
+        """Show help information with a custom retro-styled window"""
+        # Create a new toplevel window for help
+        help_window = tk.Toplevel(self.master)
+        help_window.title("How to Play")
+        help_window.geometry("500x450")
+        help_window.resizable(False, False)
+        help_window.configure(bg="#1a1a2e")
         
-        - Use arrow keys or WASD to move tiles
-        - When two tiles with the same number touch, they merge into one
-        - Try to reach the 2048 tile!
+        # Make window modal (user must interact with it before returning to game)
+        help_window.transient(self.master)
+        help_window.grab_set()
         
-        Controls:
-        - Arrow keys or WASD: Move tiles
-        - R: Restart game
-        - M: Toggle sound
-        - ESC: Show menu
-        - Save Game: Save your current progress
-        - Help: Show this help message
-        - Quit: Exit the game
-        """
-        messagebox.showinfo("How to Play", help_text)
+        # Create a semi-transparent overlay for the retro look
+        overlay = tk.Frame(help_window, bg="#1a1a2e", bd=0)
+        overlay.place(x=0, y=0, width=500, height=450)
+        
+        # Create a canvas for the neon border
+        border_canvas = tk.Canvas(help_window, bg="#1a1a2e", highlightthickness=0, bd=0)
+        border_canvas.place(x=10, y=10, width=480, height=430)
+        
+        # Draw neon border with glow effect
+        border_canvas.create_rectangle(2, 2, 478, 428, outline="#00FFFF", width=2)
+        
+        # Title with retro font
+        title_label = tk.Label(help_window, text="HOW TO PLAY 2048", 
+                             font=("Press Start 2P", 16), bg="#1a1a2e", fg="#FFFF00")
+        title_label.pack(pady=(20, 10))
+        
+        # Help content frame
+        content_frame = tk.Frame(help_window, bg="#1a1a2e", bd=0)
+        content_frame.pack(fill="both", expand=True, padx=40, pady=10)
+        
+        # Game description
+        desc_label = tk.Label(content_frame, text="Combine tiles with the same number\nto reach the 2048 tile!", 
+                            font=("Press Start 2P", 8), bg="#1a1a2e", fg="#FFFFFF",
+                            justify="center")
+        desc_label.pack(pady=(0, 20))
+        
+        # Controls section
+        controls_title = tk.Label(content_frame, text="CONTROLS", 
+                                font=("Press Start 2P", 12), bg="#1a1a2e", fg="#00FFFF")
+        controls_title.pack(pady=(0, 10))
+        
+        # Controls list
+        controls = [
+            ("Arrow Keys / WASD", "Move tiles"),
+            ("R", "Restart game"),
+            ("M", "Toggle sound"),
+            ("ESC", "Show menu"),
+            ("S", "Save game")
+        ]
+        
+        # Create a frame for the controls grid
+        controls_frame = tk.Frame(content_frame, bg="#1a1a2e")
+        controls_frame.pack(pady=10)
+        
+        # Add each control with its description
+        for i, (key, action) in enumerate(controls):
+            key_label = tk.Label(controls_frame, text=key, 
+                               font=("Press Start 2P", 8), bg="#1a1a2e", fg="#FFFF00",
+                               anchor="e", width=20)
+            key_label.grid(row=i, column=0, padx=(0, 10), pady=5, sticky="e")
+            
+            action_label = tk.Label(controls_frame, text=action, 
+                                  font=("Press Start 2P", 8), bg="#1a1a2e", fg="#FFFFFF",
+                                  anchor="w", width=15)
+            action_label.grid(row=i, column=1, padx=(10, 0), pady=5, sticky="w")
+        
+        # Tips section
+        tip_label = tk.Label(content_frame, text="TIP: Plan your moves carefully!\nDon't get stuck with no valid moves.", 
+                           font=("Press Start 2P", 8), bg="#1a1a2e", fg="#FF9900",
+                           justify="center")
+        tip_label.pack(pady=20)
+        
+        # OK button with retro styling
+        button_style = {
+            "font": ("Press Start 2P", 10),
+            "bg": "#1a1a2e",
+            "activebackground": "#2a2a4e",
+            "bd": 0,
+            "width": 10,
+            "height": 2,
+            "relief": tk.FLAT,
+        }
+        
+        ok_button = tk.Button(help_window, text="OK", fg="#00FFFF",
+                           command=help_window.destroy,
+                           **button_style)
+        ok_button.pack(pady=20)
+        
+        # Center the window on the screen
+        help_window.update_idletasks()
+        width = help_window.winfo_width()
+        height = help_window.winfo_height()
+        x = (help_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (help_window.winfo_screenheight() // 2) - (height // 2)
+        help_window.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # Make sure the window stays on top and gets focus
+        help_window.lift()
+        help_window.focus_force()
     
     def exit_game(self):
         self.master.quit()
     
 if __name__ == "__main__":
     root = tk.Tk()
-    root.title("2048 Retro Game")
+    root.title("2048 Game")
     root.geometry("400x600")
+    set_window_icon(root)
     MainMenu(root)
     root.mainloop()
