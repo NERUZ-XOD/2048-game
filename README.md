@@ -34,7 +34,13 @@ A retro-styled implementation of the classic 2048 puzzle game with custom animat
 
 ### Option 1: Run the Executable (Windows)
 
-Download the latest release from the [Releases](https://github.com/yourusername/retro-2048/releases) page and run the executable.
+**No building required!** The executable is already included in this repository in the `dist` folder. To play the game:
+
+1. Download or clone this repository
+2. Navigate to the `dist` folder
+3. Run `2048 Game.exe`
+
+That's it! No installation or building required.
 
 ### Option 2: Run from Source
 
@@ -64,7 +70,9 @@ Download the latest release from the [Releases](https://github.com/yourusername/
 
 ## Building the Executable
 
-To build the executable yourself:
+**Note:** You don't need to build the executable yourself as it's already included in the `dist` folder.
+
+However, if you want to build it yourself:
 
 1. Install PyInstaller:
    ```

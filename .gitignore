@@ -8,7 +8,7 @@ __pycache__/
 *$py.class
 
 # Distribution / packaging
-dist/
+# dist/  # Commented out to include the dist directory
 build/
 *.egg-info/
 

@@ -16,7 +16,7 @@ All notable changes to the Retro 2048 project will be documented in this file.
   - Help menu
   - Sound toggle notification
   - Save game confirmation
-- Executable file for Windows
+- Executable file for Windows included in the repository
 
 ### Technical Details
 - Implemented using Python with Tkinter
