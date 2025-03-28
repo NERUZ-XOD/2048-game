@@ -1098,9 +1098,74 @@ class Game2048:
             save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_game.json')
             with open(save_path, 'w') as f:
                 json.dump(game_state, f)
-            messagebox.showinfo("Game Saved", "Your game has been saved successfully!")
+            self.show_save_success()
         except Exception as e:
-            messagebox.showerror("Error", f"Could not save game: {e}")
+            print(f"Error saving game: {e}")
+            messagebox.showerror("Save Error", f"Could not save game: {e}")
+    
+    def show_save_success(self):
+        """Show a stylized game saved success message"""
+        # Create a new top-level window
+        save_success = tk.Toplevel()
+        save_success.title("Game Saved")
+        save_success.geometry("350x250")
+        save_success.resizable(False, False)
+        save_success.configure(bg="#000000")
+        
+        # Ensure it stays on top
+        save_success.attributes("-topmost", True)
+        
+        # Load background image
+        try:
+            bg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "menu_background.png")
+            if os.path.exists(bg_path):
+                img = Image.open(bg_path)
+                img = img.resize((350, 250), Image.Resampling.LANCZOS)
+                bg_image = ImageTk.PhotoImage(img)
+                
+                # Create background label
+                bg_label = tk.Label(save_success, image=bg_image)
+                bg_label.image = bg_image  # Keep a reference to prevent garbage collection
+                bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+        except Exception as e:
+            print(f"Error loading background for save success: {e}")
+        
+        # Create a semi-transparent frame for content
+        content_frame = tk.Frame(save_success, bg="#000000")
+        content_frame.place(relx=0.5, rely=0.5, anchor="center", width=300, height=200)
+        
+        # Add a green border around the frame (green for success)
+        border_frame = tk.Frame(save_success, bg="#00FF00")
+        border_frame.place(relx=0.5, rely=0.5, anchor="center", width=304, height=204)
+        content_frame.lift()  # Bring content frame to front
+        
+        # Success title
+        title_label = tk.Label(content_frame, text="GAME SAVED", 
+                              font=("Press Start 2P", 18), fg="#00FF00", bg="#000000")
+        title_label.pack(pady=(30, 20))
+        
+        # Add a separator line
+        separator = tk.Canvas(content_frame, width=250, height=2, bg="#000000",
+                            highlightthickness=0)
+        separator.pack(pady=10)
+        separator.create_line(0, 1, 250, 1, fill="#00FF00", width=2)
+        
+        # Success message
+        message_label = tk.Label(content_frame, text="Your game has been\nsaved successfully!", 
+                               font=("Press Start 2P", 10), fg="#FFFFFF", bg="#000000",
+                               justify=tk.CENTER)
+        message_label.pack(pady=10)
+        
+        # OK button
+        ok_button = tk.Button(content_frame, text="OK", 
+                            font=("Press Start 2P", 12), fg="#00FF00", bg="#111122",
+                            width=8, height=1, command=save_success.destroy,
+                            relief=tk.FLAT, borderwidth=2,
+                            activebackground="#222233", activeforeground="#00FF00")
+        ok_button.pack(pady=15)
+        
+        # Auto-close after 3 seconds
+        save_success.after(3000, save_success.destroy)
     
     def load_game(self):
         """Load a saved game state"""
@@ -1115,14 +1180,140 @@ class Game2048:
             self.high_score = int(game_state['high_score'])
             self.is_animating = False  # Reset animation flag
             self.update_ui()
-            messagebox.showinfo("Game Loaded", "Your saved game has been loaded successfully!")
+            self.show_game_loaded()
             return True
         except (FileNotFoundError, json.JSONDecodeError):
-            messagebox.showinfo("No Saved Game", "No saved game found. Starting a new game.")
+            self.show_no_save_found()
             return False
         except Exception as e:
             messagebox.showerror("Error", f"Could not load game: {e}")
             return False
+    
+    def show_game_loaded(self):
+        """Show a stylized game loaded success message"""
+        # Create a new top-level window
+        load_success = tk.Toplevel()
+        load_success.title("Game Loaded")
+        load_success.geometry("350x250")
+        load_success.resizable(False, False)
+        load_success.configure(bg="#000000")
+        
+        # Ensure it stays on top
+        load_success.attributes("-topmost", True)
+        
+        # Load background image
+        try:
+            bg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "menu_background.png")
+            if os.path.exists(bg_path):
+                img = Image.open(bg_path)
+                img = img.resize((350, 250), Image.Resampling.LANCZOS)
+                bg_image = ImageTk.PhotoImage(img)
+                
+                # Create background label
+                bg_label = tk.Label(load_success, image=bg_image)
+                bg_label.image = bg_image  # Keep a reference to prevent garbage collection
+                bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+        except Exception as e:
+            print(f"Error loading background for load success: {e}")
+        
+        # Create a semi-transparent frame for content
+        content_frame = tk.Frame(load_success, bg="#000000")
+        content_frame.place(relx=0.5, rely=0.5, anchor="center", width=300, height=200)
+        
+        # Add a blue border around the frame (blue for information)
+        border_frame = tk.Frame(load_success, bg="#3399FF")
+        border_frame.place(relx=0.5, rely=0.5, anchor="center", width=304, height=204)
+        content_frame.lift()  # Bring content frame to front
+        
+        # Information icon
+        icon_frame = tk.Frame(content_frame, bg="#000000", width=50, height=50)
+        icon_frame.pack(pady=(20, 0))
+        
+        # Create a circular background for the icon
+        icon_canvas = tk.Canvas(icon_frame, width=50, height=50, bg="#000000", highlightthickness=0)
+        icon_canvas.pack()
+        icon_canvas.create_oval(5, 5, 45, 45, fill="#3399FF", outline="")
+        icon_canvas.create_text(25, 25, text="i", font=("Press Start 2P", 20), fill="#FFFFFF")
+        
+        # Success message
+        message_label = tk.Label(content_frame, text="Your saved game has been\nloaded successfully!", 
+                               font=("Press Start 2P", 10), fg="#CCCCCC", bg="#000000",
+                               justify=tk.CENTER)
+        message_label.pack(pady=20)
+        
+        # OK button
+        ok_button = tk.Button(content_frame, text="OK", 
+                            font=("Press Start 2P", 12), fg="#FFFFFF", bg="#3399FF",
+                            width=8, height=1, command=load_success.destroy,
+                            relief=tk.FLAT, borderwidth=2,
+                            activebackground="#4488FF", activeforeground="#FFFFFF")
+        ok_button.pack(pady=15)
+        
+        # Auto-close after 3 seconds
+        load_success.after(3000, load_success.destroy)
+    
+    def show_no_save_found(self):
+        """Show a stylized no saved game found message"""
+        # Create a new top-level window
+        no_save = tk.Toplevel()
+        no_save.title("No Saved Game")
+        no_save.geometry("350x250")
+        no_save.resizable(False, False)
+        no_save.configure(bg="#000000")
+        
+        # Ensure it stays on top
+        no_save.attributes("-topmost", True)
+        
+        # Load background image
+        try:
+            bg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "menu_background.png")
+            if os.path.exists(bg_path):
+                img = Image.open(bg_path)
+                img = img.resize((350, 250), Image.Resampling.LANCZOS)
+                bg_image = ImageTk.PhotoImage(img)
+                
+                # Create background label
+                bg_label = tk.Label(no_save, image=bg_image)
+                bg_label.image = bg_image  # Keep a reference to prevent garbage collection
+                bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+        except Exception as e:
+            print(f"Error loading background for no save dialog: {e}")
+        
+        # Create a semi-transparent frame for content
+        content_frame = tk.Frame(no_save, bg="#000000")
+        content_frame.place(relx=0.5, rely=0.5, anchor="center", width=300, height=200)
+        
+        # Add a yellow border around the frame (yellow for warning/notification)
+        border_frame = tk.Frame(no_save, bg="#FFCC00")
+        border_frame.place(relx=0.5, rely=0.5, anchor="center", width=304, height=204)
+        content_frame.lift()  # Bring content frame to front
+        
+        # Information icon
+        icon_frame = tk.Frame(content_frame, bg="#000000", width=50, height=50)
+        icon_frame.pack(pady=(20, 0))
+        
+        # Create a circular background for the icon
+        icon_canvas = tk.Canvas(icon_frame, width=50, height=50, bg="#000000", highlightthickness=0)
+        icon_canvas.pack()
+        icon_canvas.create_oval(5, 5, 45, 45, fill="#FFCC00", outline="")
+        icon_canvas.create_text(25, 25, text="!", font=("Press Start 2P", 20), fill="#000000")
+        
+        # Message
+        message_label = tk.Label(content_frame, text="No saved game found.\nStarting a new game.", 
+                               font=("Press Start 2P", 10), fg="#CCCCCC", bg="#000000",
+                               justify=tk.CENTER)
+        message_label.pack(pady=20)
+        
+        # OK button
+        ok_button = tk.Button(content_frame, text="OK", 
+                            font=("Press Start 2P", 12), fg="#000000", bg="#FFCC00",
+                            width=8, height=1, command=no_save.destroy,
+                            relief=tk.FLAT, borderwidth=2,
+                            activebackground="#FFD633", activeforeground="#000000")
+        ok_button.pack(pady=15)
+        
+        # Auto-close after 3 seconds
+        no_save.after(3000, no_save.destroy)
     
     def show_help(self):
         """Show help information"""
@@ -1159,12 +1350,92 @@ class Game2048:
         if self.is_animating:
             return
             
-        if messagebox.askyesno("Quit Game", "Are you sure you want to quit? Your progress will be lost unless saved."):
-            self.window.destroy()
-            root = tk.Tk()
-            root.title("2048 Retro Game")
-            root.geometry("400x600")
-            MainMenu(root)
+        self.show_quit_confirmation()
+    
+    def show_quit_confirmation(self):
+        """Show a stylized quit confirmation dialog"""
+        # Create a new top-level window
+        quit_dialog = tk.Toplevel()
+        quit_dialog.title("Quit Game")
+        quit_dialog.geometry("400x250")
+        quit_dialog.resizable(False, False)
+        quit_dialog.configure(bg="#000000")
+        
+        # Ensure it stays on top
+        quit_dialog.attributes("-topmost", True)
+        quit_dialog.transient(self.window)
+        quit_dialog.grab_set()
+        
+        # Load background image
+        try:
+            bg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "menu_background.png")
+            if os.path.exists(bg_path):
+                img = Image.open(bg_path)
+                img = img.resize((400, 250), Image.Resampling.LANCZOS)
+                bg_image = ImageTk.PhotoImage(img)
+                
+                # Create background label
+                bg_label = tk.Label(quit_dialog, image=bg_image)
+                bg_label.image = bg_image  # Keep a reference to prevent garbage collection
+                bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+        except Exception as e:
+            print(f"Error loading background for quit dialog: {e}")
+        
+        # Create a semi-transparent frame for content
+        content_frame = tk.Frame(quit_dialog, bg="#000000")
+        content_frame.place(relx=0.5, rely=0.5, anchor="center", width=350, height=200)
+        
+        # Add a red border around the frame (red for warning/quit)
+        border_frame = tk.Frame(quit_dialog, bg="#FF5555")
+        border_frame.place(relx=0.5, rely=0.5, anchor="center", width=354, height=204)
+        content_frame.lift()  # Bring content frame to front
+        
+        # Warning icon (question mark)
+        icon_frame = tk.Frame(content_frame, bg="#000000", width=50, height=50)
+        icon_frame.pack(pady=(20, 0))
+        
+        # Create a circular background for the icon
+        icon_canvas = tk.Canvas(icon_frame, width=50, height=50, bg="#000000", highlightthickness=0)
+        icon_canvas.pack()
+        icon_canvas.create_oval(5, 5, 45, 45, fill="#3399FF", outline="")
+        icon_canvas.create_text(25, 25, text="?", font=("Press Start 2P", 20), fill="#FFFFFF")
+        
+        # Warning message
+        message_label = tk.Label(content_frame, 
+                               text="Are you sure you want to quit?\nYour progress will be lost\nunless saved.", 
+                               font=("Press Start 2P", 10), fg="#CCCCCC", bg="#000000",
+                               justify=tk.CENTER)
+        message_label.pack(pady=15)
+        
+        # Buttons frame
+        button_frame = tk.Frame(content_frame, bg="#000000")
+        button_frame.pack(pady=15)
+        
+        # Yes button
+        yes_button = tk.Button(button_frame, text="YES", 
+                             font=("Press Start 2P", 12), fg="#FFFFFF", bg="#3399FF",
+                             width=8, height=1, 
+                             command=lambda: [quit_dialog.destroy(), self.do_quit()],
+                             relief=tk.FLAT, borderwidth=2,
+                             activebackground="#4488FF", activeforeground="#FFFFFF")
+        yes_button.pack(side=tk.LEFT, padx=10)
+        
+        # No button
+        no_button = tk.Button(button_frame, text="NO", 
+                            font=("Press Start 2P", 12), fg="#FFFFFF", bg="#666666",
+                            width=8, height=1, command=quit_dialog.destroy,
+                            relief=tk.FLAT, borderwidth=2,
+                            activebackground="#888888", activeforeground="#FFFFFF")
+        no_button.pack(side=tk.LEFT, padx=10)
+    
+    def do_quit(self):
+        """Actually quit the game after confirmation"""
+        self.window.destroy()
+        root = tk.Tk()
+        root.title("2048 Retro Game")
+        root.geometry("400x600")
+        MainMenu(root)
+        root.mainloop()
     
     def show_menu(self):
         """Show a simple in-game menu"""
