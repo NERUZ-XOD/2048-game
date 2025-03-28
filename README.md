@@ -16,7 +16,9 @@ A retro-styled implementation of the classic 2048 puzzle game with custom animat
 
 ## Screenshots
 
-<img src="screenshots/screenshot1.png" alt="Main Menu" width="500" height="200"/>
+<img src="screenshots/screenshot1.png" alt="Main Menu" width="500" height="600"/>
+<img src="screenshots/screenshot2.png" alt="Main Menu" width="500" height="600"/>
+<img src="screenshots/screenshot3.png" alt="Main Menu" width="500" height="600"/>
 ![Game Screenshot](screenshots/screenshot2.png)
 ![help](screenshots/screenshot3.png)
 
