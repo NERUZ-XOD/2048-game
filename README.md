@@ -46,8 +46,8 @@ That's it! No installation or building required.
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/retro-2048.git
-   cd retro-2048
+   git clone https://github.com/yourusername/2048-game-GUI.git
+   cd "2048 game (GUI)"
    ```
 
 2. Install the required dependencies:
@@ -92,7 +92,8 @@ However, if you want to build it yourself:
 - `images/`: Contains all game images and tiles
 - `sounds/`: Contains sound effects
 - `fonts/`: Contains the pixel font used in the game
-- `data/`: Stores game saves and high scores
+- `dist/`: Contains the executable version of the game
+- `data/`: Created automatically to store game saves and high scores
 
 ## License
 
