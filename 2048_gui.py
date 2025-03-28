@@ -1,5 +1,5 @@
 import tkinter as tk
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw
 import numpy as np
 import random
 import os
@@ -14,7 +14,7 @@ class Game2048:
         self.window = master
         self.window.title("2048 Retro Game")
         self.window.geometry("400x600")
-        self.window.resizable(False, False)
+        self.window.resizable(False, False)  # Disable resizing
         self.grid = np.zeros((4, 4), dtype=int)
         
         # Score tracking
@@ -59,7 +59,9 @@ class Game2048:
         self.is_animating = False
         self.animation_queue = []
         self.last_grid = None
-        self.grid_positions = [
+        
+        # Original grid positions (for windowed mode)
+        self.original_grid_positions = [
             # Row 1
             [(25, 25), (117, 25), (209, 25), (301, 25)],
             # Row 2
@@ -70,8 +72,16 @@ class Game2048:
             [(25, 301), (117, 301), (209, 301), (301, 301)]
         ]
         
+        # Current grid positions (may be scaled in fullscreen)
+        self.grid_positions = [row[:] for row in self.original_grid_positions]
+        
+        # Base tile size (for windowed mode)
+        self.base_tile_size = 72
+        self.current_tile_size = self.base_tile_size
+        
         # Load tile images and grid background before UI initialization
         self.images = {}
+        self.load_background_image()  
         self.load_grid_background()
         self.load_images()
         
@@ -85,37 +95,52 @@ class Game2048:
         self.window.bind("<Key>", self.handle_keypress)
     
     def init_ui(self):
-        # Create main frame for the game grid
-        self.frame = tk.Frame(self.window, bg="#bbada0", width=400, height=400)
+        """Initialize the UI components"""
+        # Create a background frame that covers the entire window
+        self.bg_frame = tk.Frame(self.window, bg="#000000")
+        self.bg_frame.place(x=0, y=0, relwidth=1, relheight=1)
+        
+        # If we have a background image, display it
+        if hasattr(self, 'background_image') and self.background_image:
+            self.bg_label = tk.Label(self.bg_frame, image=self.background_image)
+            self.bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+        
+        # Main frame for the game grid
+        self.frame = tk.Frame(self.window, bg=self.empty_color, width=400, height=400)
         self.frame.pack(pady=20)
-        self.frame.pack_propagate(False)  # Prevent frame from shrinking to fit children
         
-        # Add grid background image first
+        # Set minimum size for the window
+        self.window.minsize(400, 600)
+        
+        # Create a canvas for the grid background
+        self.canvas = tk.Canvas(self.frame, width=400, height=400, bg=self.empty_color, 
+                               highlightthickness=0)
+        self.canvas.pack()
+        
+        # Display the grid background image
         if hasattr(self, 'grid_background') and self.grid_background:
-            self.bg_label = tk.Label(self.frame, image=self.grid_background, bg="#bbada0")
-            self.bg_label.place(x=0, y=0, width=400, height=400)
+            self.canvas.create_image(0, 0, anchor="nw", image=self.grid_background)
         
-        # Score display
-        self.score_frame = tk.Frame(self.window, bg="#bbada0")
+        # Score frame with semi-transparent background and neon styling
+        self.score_frame = tk.Frame(self.window, bg="#222233")
         self.score_frame.pack(fill="x", padx=20, pady=10)
         
-        self.score_label = tk.Label(self.score_frame, text=f"Score: {self.current_score}", 
-                                   font=("Press Start 2P", 12), bg="#bbada0", fg="#ffffff")
-        self.score_label.pack(side="left", padx=10)
+        # Add a neon border to the score frame
+        score_canvas = tk.Canvas(self.score_frame, bg="#222233", height=40, highlightthickness=0)
+        score_canvas.pack(fill="x", expand=True)
+        score_canvas.create_rectangle(2, 2, 398, 38, outline="#00FFFF", width=2)
         
-        self.high_score_label = tk.Label(self.score_frame, text=f"Best: {self.high_score}", 
-                                        font=("Press Start 2P", 12), bg="#bbada0", fg="#ffffff")
-        self.high_score_label.pack(side="right", padx=10)
+        # Score labels with neon styling
+        self.score_label = tk.Label(score_canvas, text=f"Score: {self.current_score}", 
+                                   font=("Press Start 2P", 12), bg="#222233", fg="#00FFFF")
+        self.score_label.place(relx=0.25, rely=0.5, anchor="center")
+        
+        self.high_score_label = tk.Label(score_canvas, text=f"Best: {self.high_score}", 
+                                        font=("Press Start 2P", 12), bg="#222233", fg="#FF00FF")
+        self.high_score_label.place(relx=0.75, rely=0.5, anchor="center")
         
         # Create tile labels with consistent size
         self.tiles = []
-        
-        # Precise measurements for grid alignment
-        # These values are carefully tuned to match the grid background
-        tile_size = 72  # Exact tile size as specified in memory
-        
-        # Fixed positions for each cell in the grid
-        # These are manually tuned to match the grid background using the exact coordinates from memory
         
         for i in range(4):
             row_tiles = []
@@ -128,41 +153,65 @@ class Game2048:
                 # Use the pre-defined positions for precise placement
                 x_pos, y_pos = self.grid_positions[i][j]
                 
-                tile.place(x=x_pos, y=y_pos, width=tile_size, height=tile_size)
+                tile.place(x=x_pos, y=y_pos, width=self.current_tile_size, height=self.current_tile_size)
                 row_tiles.append(tile)
             self.tiles.append(row_tiles)
         
-        # Bottom menu
-        self.bottom_frame = tk.Frame(self.window, bg="#bbada0")
+        # Bottom menu with cyberpunk styling
+        self.bottom_frame = tk.Frame(self.window, bg="#000000")
         self.bottom_frame.pack(fill="x", side="bottom", padx=20, pady=20)
         
+        # Create neon-styled buttons
+        button_style = {
+            "font": ("Press Start 2P", 10),
+            "bg": "#222233",
+            "activebackground": "#333344",
+            "relief": tk.FLAT,
+            "borderwidth": 2
+        }
+        
+        # Save Game button with cyan styling
         self.save_button = tk.Button(self.bottom_frame, text="Save Game", 
-                                    command=self.save_game, font=("Press Start 2P", 10),
-                                    bg="#8f7a66", fg="#ffffff")
+                                    command=self.save_game, fg="#00FFFF",
+                                    activeforeground="#00FFFF",
+                                    highlightbackground="#00FFFF",
+                                    highlightcolor="#00FFFF",
+                                    highlightthickness=2,
+                                    **button_style)
         self.save_button.pack(side="left", padx=10)
         
+        # Help button with yellow styling
         self.help_button = tk.Button(self.bottom_frame, text="Help", 
-                                    command=self.show_help, font=("Press Start 2P", 10),
-                                    bg="#8f7a66", fg="#ffffff")
+                                    command=self.show_help, fg="#FFFF00",
+                                    activeforeground="#FFFF00",
+                                    highlightbackground="#FFFF00",
+                                    highlightcolor="#FFFF00",
+                                    highlightthickness=2,
+                                    **button_style)
         self.help_button.pack(side="left", padx=10)
         
+        # Quit button with red styling
         self.quit_button = tk.Button(self.bottom_frame, text="Quit", 
-                                    command=self.quit_game, font=("Press Start 2P", 10),
-                                    bg="#8f7a66", fg="#ffffff")
-        self.quit_button.pack(side="right", padx=10)
+                                    command=self.quit_game, fg="#FF5555",
+                                    activeforeground="#FF5555",
+                                    highlightbackground="#FF5555",
+                                    highlightcolor="#FF5555",
+                                    highlightthickness=2,
+                                    **button_style)
+        self.quit_button.pack(side="left", padx=10)
         
-        # Music control
+        # Music toggle button with magenta styling
         self.music_button = tk.Button(self.bottom_frame, text="🔊", 
-                                     command=self.toggle_music, font=("Press Start 2P", 10),
-                                     bg="#8f7a66", fg="#ffffff", width=2)
+                                     command=self.toggle_music, fg="#FF00FF",
+                                     activeforeground="#FF00FF",
+                                     highlightbackground="#FF00FF",
+                                     highlightcolor="#FF00FF",
+                                     highlightthickness=2,
+                                     width=2, **button_style)
         self.music_button.pack(side="right", padx=10)
-        
+    
     def update_ui(self):
         """Update the UI with current grid values, using images instead of text"""
-        # Precise measurements for grid alignment
-        # These values are carefully tuned to match the grid background
-        tile_size = 72  # Updated to match the tile size in init_ui
-        
         for i in range(4):
             for j in range(4):
                 value = self.grid[i, j]
@@ -174,7 +223,7 @@ class Game2048:
                     x_pos, y_pos = self.grid_positions[i][j]
                     
                     # Make sure the tile is visible and properly placed
-                    self.tiles[i][j].place(x=x_pos, y=y_pos, width=tile_size, height=tile_size)
+                    self.tiles[i][j].place(x=x_pos, y=y_pos, width=self.current_tile_size, height=self.current_tile_size)
                     
                     if value in self.images:
                         # Display the image for this value
@@ -206,7 +255,7 @@ class Game2048:
             
         tile = self.tiles[row][col]
         x_pos, y_pos = self.grid_positions[row][col]
-        tile_size = 72
+        tile_size = self.current_tile_size
         
         # Configure the tile with the correct image/value
         if value in self.images:
@@ -324,9 +373,7 @@ class Game2048:
                 self.save_high_score()
             
             # Check if game is over
-            if self.is_game_over():
-                self.play_sound('game_over')
-                self.show_game_over()
+            self.window.after(self.animation_duration + 50, self.check_game_over)
         else:
             # If grid didn't change, ensure UI is still updated
             self.update_ui()
@@ -394,7 +441,7 @@ class Game2048:
     def animate_grid_change(self, movements, merged_positions, direction):
         """Animate the entire grid change including movements and merges"""
         self.is_animating = True
-        tile_size = 72
+        tile_size = self.current_tile_size
         
         # If no movements, skip directly to spawning a tile
         if not movements:
@@ -431,6 +478,7 @@ class Game2048:
             
             # Position at source
             src_x, src_y = self.grid_positions[src_row][src_col]
+            
             temp_tile.place(x=src_x, y=src_y, width=tile_size, height=tile_size)
             
             # Calculate destination
@@ -487,7 +535,7 @@ class Game2048:
             self.is_animating = False
             return
             
-        tile_size = 72
+        tile_size = self.current_tile_size
         
         # Count for tracking when all animations are complete
         self.merge_animations_count = len(merged_positions)
@@ -594,11 +642,13 @@ class Game2048:
             self.show_help()
         elif key == "escape":  # Show menu/pause
             self.show_menu()
+        elif key == "f11" or key == "f":  # Toggle fullscreen
+            pass
     
     def load_high_score(self):
         """Load high score from file"""
         try:
-            with open('high_score.json', 'r') as f:
+            with open(os.path.join(os.path.dirname(__file__), 'high_score.json'), 'r') as f:
                 data = json.load(f)
                 return data.get('high_score', 0)
         except (FileNotFoundError, json.JSONDecodeError):
@@ -607,7 +657,9 @@ class Game2048:
     def save_high_score(self):
         """Save high score to file"""
         try:
-            with open('high_score.json', 'w') as f:
+            # Use absolute path to save the high score file
+            high_score_path = os.path.join(os.path.dirname(__file__), 'high_score.json')
+            with open(high_score_path, 'w') as f:
                 json.dump({'high_score': int(self.high_score)}, f)
         except Exception as e:
             print(f"Error saving high score: {e}")
@@ -749,7 +801,7 @@ class Game2048:
         os.makedirs(image_folder, exist_ok=True)
         
         # Define the tile size to match our UI
-        tile_size = 72  # Updated to match the tile size in init_ui
+        tile_size = self.current_tile_size
         
         # Create empty tile image if it doesn't exist
         empty_tile_path = os.path.join(image_folder, "empty.png")
@@ -797,6 +849,68 @@ class Game2048:
             else:
                 print(f"Image file not found: {image_path}")
     
+    def load_background_image(self):
+        """Load or create a colorful background image for the game"""
+        # Path to images folder - create if it doesn't exist
+        image_folder = os.path.join(os.path.dirname(__file__), "images")
+        os.makedirs(image_folder, exist_ok=True)
+        
+        bg_path = os.path.join(image_folder, "background.png")
+        if not os.path.exists(bg_path):
+            try:
+                # Create a colorful gradient background if one doesn't exist
+                width, height = 400, 600
+                
+                # Create a new image with gradient
+                bg_img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(bg_img)
+                
+                # Create a colorful gradient background
+                for y in range(height):
+                    # Calculate gradient colors
+                    r = int(255 * (1 - y / height) + 100 * (y / height))  # Red to purple
+                    g = int(100 * (1 - y / height) + 50 * (y / height))   # Less green
+                    b = int(150 * (1 - y / height) + 200 * (y / height))  # More blue at bottom
+                    
+                    # Draw a horizontal line with the calculated color
+                    draw.line([(0, y), (width, y)], fill=(r, g, b, 255))
+                
+                # Add some retro-style decorations
+                # Add grid lines
+                for i in range(0, width, 20):
+                    alpha = 30  # Subtle transparency
+                    draw.line([(i, 0), (i, height)], fill=(255, 255, 255, alpha), width=1)
+                
+                for i in range(0, height, 20):
+                    alpha = 30  # Subtle transparency
+                    draw.line([(0, i), (width, i)], fill=(255, 255, 255, alpha), width=1)
+                
+                # Add some random pixels for a retro effect
+                for _ in range(300):
+                    x = random.randint(0, width-1)
+                    y = random.randint(0, height-1)
+                    size = random.randint(1, 3)
+                    alpha = random.randint(30, 100)
+                    color = (255, 255, 255, alpha)
+                    draw.rectangle([x, y, x+size, y+size], fill=color)
+                
+                # Save the background
+                bg_img.save(bg_path)
+                print(f"Created background image at: {bg_path}")
+            except Exception as e:
+                print(f"Error creating background image: {e}")
+                self.background_image = None
+                return
+        
+        try:
+            # Load the background image
+            img = Image.open(bg_path)
+            self.background_image = ImageTk.PhotoImage(img)
+            print("Successfully loaded background image")
+        except Exception as e:
+            print(f"Error loading background image: {e}")
+            self.background_image = None
+    
     def compress(self, row):
         # Fix: NumPy arrays don't have count() method
         # Convert row to list, count zeros, then create new row
@@ -842,14 +956,120 @@ class Game2048:
         self.play_sound('win')
         messagebox.showinfo("Congratulations!", "You've reached 2048! You can continue playing to achieve a higher score.")
     
+    def check_game_over(self):
+        """Check if the game is over after animation completes"""
+        # Reset animation flag to ensure game over screen can be shown
+        self.is_animating = False
+        
+        # Check if game is over
+        if self.is_game_over():
+            self.show_game_over()
+    
     def show_game_over(self):
-        """Show game over message"""
-        response = messagebox.askyesno("Game Over", f"Game Over! Your score: {self.current_score}\nDo you want to play again?")
-        if response:
-            self.restart_game()
-        else:
-            self.quit_game()
-
+        """Show game over message with retro styling"""
+        print("Game over detected, showing game over screen")
+        
+        # Don't show game over during animation
+        if self.is_animating:
+            print("Animation in progress, not showing game over screen")
+            return
+            
+        # Play game over sound
+        self.play_sound('game_over')
+        
+        # Create a new top-level window
+        game_over = tk.Toplevel()
+        game_over.title("Game Over")
+        game_over.geometry("400x600")
+        game_over.resizable(False, False)
+        game_over.configure(bg="#000000")
+        
+        # Ensure it stays on top
+        game_over.attributes("-topmost", True)
+        
+        # Load background image
+        try:
+            bg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "menu_background.png")
+            if os.path.exists(bg_path):
+                img = Image.open(bg_path)
+                img = img.resize((400, 600), Image.Resampling.LANCZOS)
+                bg_image = ImageTk.PhotoImage(img)
+                
+                # Create background label
+                bg_label = tk.Label(game_over, image=bg_image)
+                bg_label.image = bg_image  # Keep a reference to prevent garbage collection
+                bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+                print("Successfully loaded game over background image")
+        except Exception as e:
+            print(f"Error loading background for game over: {e}")
+        
+        # Create a semi-transparent frame for content
+        content_frame = tk.Frame(game_over, bg="#000000")
+        content_frame.place(relx=0.5, rely=0.5, anchor="center", width=300, height=400)
+        
+        # Add a red border around the frame
+        border_frame = tk.Frame(game_over, bg="#FF0000")
+        border_frame.place(relx=0.5, rely=0.5, anchor="center", width=304, height=404)
+        content_frame.lift()  # Bring content frame to front
+        
+        # Game Over title
+        title_label = tk.Label(content_frame, text="GAME OVER", 
+                              font=("Press Start 2P", 24), fg="#FF0000", bg="#000000")
+        title_label.pack(pady=(20, 10))
+        
+        # Add a separator line
+        separator = tk.Canvas(content_frame, width=250, height=2, bg="#000000",
+                            highlightthickness=0)
+        separator.pack(pady=10)
+        separator.create_line(0, 1, 250, 1, fill="#FF0000", width=2)
+        
+        # Score display
+        score_label = tk.Label(content_frame, text=f"SCORE: {self.current_score}", 
+                             font=("Press Start 2P", 16), fg="#FFFF00", bg="#000000")
+        score_label.pack(pady=10)
+        
+        # High score display
+        high_score = max(self.high_score, self.current_score)
+        high_score_label = tk.Label(content_frame, text=f"HIGH SCORE: {high_score}", 
+                                  font=("Press Start 2P", 12), fg="#00FFFF", bg="#000000")
+        high_score_label.pack(pady=5)
+        
+        # Add another separator line
+        separator2 = tk.Canvas(content_frame, width=250, height=2, bg="#000000",
+                             highlightthickness=0)
+        separator2.pack(pady=15)
+        separator2.create_line(0, 1, 250, 1, fill="#FF0000", width=2)
+        
+        # Buttons frame
+        button_frame = tk.Frame(content_frame, bg="#000000")
+        button_frame.pack(pady=20)
+        
+        # Button style
+        button_style = {"font": ("Press Start 2P", 12), "width": 12, "height": 2, 
+                       "bg": "#111122", "activebackground": "#222233", 
+                       "relief": tk.FLAT, "borderwidth": 2}
+        
+        # Try again button
+        restart_button = tk.Button(button_frame, text="TRY AGAIN", fg="#00FF00",
+                                 command=lambda: [game_over.destroy(), self.restart_game()],
+                                 **button_style)
+        restart_button.pack(pady=10)
+        
+        # Quit button
+        quit_button = tk.Button(button_frame, text="QUIT", fg="#FF5555",
+                              command=lambda: [game_over.destroy(), self.quit_game()],
+                              **button_style)
+        quit_button.pack(pady=10)
+        
+        # Update high score if needed
+        if self.current_score > self.high_score:
+            self.high_score = self.current_score
+            self.save_high_score()
+        
+        # Make sure the window stays on top and gets focus
+        game_over.lift()
+        game_over.focus_force()
+    
     def restart_game(self):
         self.grid = np.zeros((4, 4), dtype=int)
         self.current_score = 0
@@ -874,7 +1094,9 @@ class Game2048:
         }
         
         try:
-            with open('saved_game.json', 'w') as f:
+            # Use absolute path to save the game file
+            save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_game.json')
+            with open(save_path, 'w') as f:
                 json.dump(game_state, f)
             messagebox.showinfo("Game Saved", "Your game has been saved successfully!")
         except Exception as e:
@@ -883,7 +1105,9 @@ class Game2048:
     def load_game(self):
         """Load a saved game state"""
         try:
-            with open('saved_game.json', 'r') as f:
+            # Use absolute path to load the game file
+            save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_game.json')
+            with open(save_path, 'r') as f:
                 game_state = json.load(f)
                 
             self.grid = np.array(game_state['grid'], dtype=int)
@@ -911,10 +1135,12 @@ class Game2048:
         
         Controls:
         - Arrow keys or WASD: Move tiles
+        - R: Restart game
+        - M: Toggle sound
+        - ESC: Show menu
         - Save Game: Save your current progress
         - Help: Show this help message
         - Quit: Exit the game
-        - 🔊: Toggle sound on/off
         """
         messagebox.showinfo("How to Play", help_text)
     
@@ -961,30 +1187,33 @@ class Game2048:
         title_label.pack(pady=15)
         
         # Buttons
-        button_style = {"font": ("Press Start 2P", 10), "width": 15, "height": 1, 
-                       "bg": "#555555", "fg": "#FFFFFF", "activebackground": "#777777"}
+        button_frame = tk.Frame(menu, bg="#333333")
+        button_frame.pack(pady=20)
         
-        resume_button = tk.Button(menu, text="Resume", command=menu.destroy, **button_style)
+        button_style = {"font": ("Press Start 2P", 10), "width": 15, "height": 1, 
+                       "bg": "#111122", "fg": "#FFFFFF", "activebackground": "#777777"}
+        
+        resume_button = tk.Button(button_frame, text="Resume", command=menu.destroy, **button_style)
         resume_button.pack(pady=5)
         
-        restart_button = tk.Button(menu, text="Restart", 
+        restart_button = tk.Button(button_frame, text="Restart", 
                                   command=lambda: [menu.destroy(), self.restart_game()], **button_style)
         restart_button.pack(pady=5)
         
         sound_text = "Sound: ON" if hasattr(self, 'music_on') and self.music_on else "Sound: OFF"
-        sound_button = tk.Button(menu, text=sound_text, 
+        sound_button = tk.Button(button_frame, text=sound_text, 
                                command=lambda: [menu.destroy(), self.toggle_music()], **button_style)
         sound_button.pack(pady=5)
         
-        help_button = tk.Button(menu, text="Help", 
+        help_button = tk.Button(button_frame, text="Help", 
                               command=lambda: [menu.destroy(), self.show_help()], **button_style)
         help_button.pack(pady=5)
         
-        save_button = tk.Button(menu, text="Save Game", 
+        save_button = tk.Button(button_frame, text="Save Game", 
                               command=lambda: [menu.destroy(), self.save_game()], **button_style)
         save_button.pack(pady=5)
         
-        quit_button = tk.Button(menu, text="Quit", 
+        quit_button = tk.Button(button_frame, text="Quit", 
                               command=lambda: [menu.destroy(), self.quit_game()], **button_style)
         quit_button.pack(pady=5)
 
@@ -992,8 +1221,13 @@ class MainMenu:
     def __init__(self, master):
         self.master = master
         self.master.title("2048 Retro Game")
-        self.frame = tk.Frame(master, bg="#000000", width=400, height=600)
+        
+        # Create a frame for the background
+        self.frame = tk.Canvas(master, width=400, height=600, highlightthickness=0)
         self.frame.pack(fill="both", expand=True)
+
+        # Set a transparent-like effect
+        self.frame.create_rectangle(0, 0, 400, 600, fill="", outline="")  # Transparent area
         
         # Load high score
         self.high_score = self.load_high_score()
@@ -1001,66 +1235,130 @@ class MainMenu:
         # Load custom fonts
         self.load_custom_fonts()
         
-        # Load pixel art background if available
+        # Load background image
         self.load_background()
         
-        # High Score Display
-        self.high_score_label = tk.Label(self.frame, text=f"High Score: {self.high_score}", 
-                                        font=("Press Start 2P", 14), fg="#FFFFFF", bg="#000000")
-        self.high_score_label.pack(pady=20)
+        # Create a semi-transparent overlay
+        overlay_width = 350
+        overlay_height = 500
+        overlay_x = (400 - overlay_width) // 2
+        overlay_y = (600 - overlay_height) // 2
         
-        # Title
-        self.title_label = tk.Label(self.frame, text="2048 RETRO", 
-                                   font=("Press Start 2P", 28), fg="#FFD700", bg="#000000")
+        # Create a neon border effect first
+        self.overlay_border = self.frame.create_rectangle(
+            overlay_x-2, overlay_y-2, 
+            overlay_x + overlay_width+2, overlay_y + overlay_height+2, 
+            fill="", outline="#00FFFF", width=2
+        )
+        
+        # Then create the semi-transparent overlay
+        self.overlay = self.frame.create_rectangle(
+            overlay_x, overlay_y, 
+            overlay_x + overlay_width, overlay_y + overlay_height, 
+            fill="#000000", outline="", stipple="gray25"  # Semi-transparent
+        )
+        
+        # Create a frame for content
+        self.content_frame = tk.Frame(self.frame, bg="#000000")
+        self.content_window = self.frame.create_window(200, 300, window=self.content_frame)
+        
+        # High Score Display with glow effect
+        score_frame = tk.Frame(self.content_frame, bg="#000000")
+        score_frame.pack(pady=(20, 5))
+        
+        score_label = tk.Label(score_frame, text="HIGH SCORE", 
+                             font=("Press Start 2P", 12), fg="#00FFFF", bg="#000000")
+        score_label.pack()
+        
+        self.high_score_label = tk.Label(score_frame, text=f"{self.high_score}", 
+                                       font=("Press Start 2P", 16), fg="#00FFFF", bg="#000000")
+        self.high_score_label.pack(pady=5)
+        
+        # Add a separator line
+        separator = tk.Canvas(self.content_frame, width=300, height=2, bg="#000000",
+                            highlightthickness=0)
+        separator.pack(pady=10)
+        separator.create_line(0, 1, 300, 1, fill="#00FFFF", width=2)
+        
+        # Title with neon glow effect
+        title_frame = tk.Frame(self.content_frame, bg="#000000")
+        title_frame.pack(pady=20)
+        
+        # Main title
+        self.title_label = tk.Label(title_frame, text="2048 GAME", 
+                                  font=("Press Start 2P", 28), fg="#FF00FF", bg="#000000")
         self.title_label.pack(pady=20)
         
+        # Add another separator line
+        separator2 = tk.Canvas(self.content_frame, width=300, height=2, bg="#000000",
+                             highlightthickness=0)
+        separator2.pack(pady=10)
+        separator2.create_line(0, 1, 300, 1, fill="#FF00FF", width=2)
+        
         # Main Menu Buttons
-        button_frame = tk.Frame(self.frame, bg="#000000")
+        button_frame = tk.Frame(self.content_frame, bg="#000000")
         button_frame.pack(pady=20)
         
-        button_style = {"font": ("Press Start 2P", 12), "width": 15, "height": 2, 
-                       "bg": "#333333", "fg": "#FFFFFF", "activebackground": "#555555"}
-        
-        self.new_game_button = tk.Button(button_frame, text="New Game", 
-                                        command=self.start_new_game, **button_style)
-        self.new_game_button.pack(pady=10)
-        
-        self.continue_button = tk.Button(button_frame, text="Continue", 
-                                        command=self.continue_game, **button_style)
-        self.continue_button.pack(pady=10)
-        
-        self.how_to_play_button = tk.Button(button_frame, text="How to Play", 
-                                           command=self.show_how_to_play, **button_style)
-        self.how_to_play_button.pack(pady=10)
-        
-        self.exit_button = tk.Button(button_frame, text="Exit", 
-                                    command=self.exit_game, **button_style)
-        self.exit_button.pack(pady=10)
+        # Custom button style with neon effect
+        self.create_neon_buttons(button_frame)
         
         # Initialize pygame for sound effects if not already initialized
         if not pygame.mixer.get_init():
             pygame.mixer.init()
     
-    def load_background(self):
-        """Load pixel art background for the main menu"""
-        image_folder = os.path.join(os.path.dirname(__file__), "images")
-        os.makedirs(image_folder, exist_ok=True)
+    def create_neon_buttons(self, parent_frame):
+        """Create buttons with neon glow effect"""
+        buttons_info = [
+            {"text": "New Game", "command": self.start_new_game, "color": "#00FFFF"},
+            {"text": "Continue", "command": self.continue_game, "color": "#FF00FF"},
+            {"text": "How to Play", "command": self.show_how_to_play, "color": "#FFFF00"},
+            {"text": "Exit", "command": self.exit_game, "color": "#FF5555"}
+        ]
         
-        bg_path = os.path.join(image_folder, "menu_background.png")
-        if os.path.exists(bg_path):
-            try:
+        self.buttons = []
+        
+        for btn_info in buttons_info:
+            # Create a button with cyberpunk styling
+            button = tk.Button(
+                parent_frame, 
+                text=btn_info["text"],
+                command=btn_info["command"],
+                font=("Press Start 2P", 12),
+                width=15, 
+                height=2,
+                bg="#111122",  # Dark background 
+                fg=btn_info["color"],  # Neon text color
+                activebackground="#222233",
+                activeforeground=btn_info["color"],
+                relief=tk.FLAT,
+                borderwidth=2,
+                highlightbackground=btn_info["color"],
+                highlightcolor=btn_info["color"],
+                highlightthickness=2
+            )
+            button.pack(pady=10)
+            self.buttons.append(button)
+    
+    # Load pixel art background for the main menu
+    def load_background(self):
+        try:
+            bg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "menu_background.png")
+            if os.path.exists(bg_path):
                 img = Image.open(bg_path)
                 img = img.resize((400, 600), Image.Resampling.LANCZOS)
-                self.bg_image = ImageTk.PhotoImage(img)
+                self.background_image = ImageTk.PhotoImage(img)
                 
-                # Create a label for the background image
-                bg_label = tk.Label(self.frame, image=self.bg_image)
-                bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+                # Create a label to display the background image
+                self.bg_label = tk.Label(self.frame, image=self.background_image)
+                self.bg_label.place(x=0, y=0, relwidth=1, relheight=1)
                 
-                # Make sure other widgets appear on top of the background
-                self.frame.lift()
-            except Exception as e:
-                print(f"Error loading menu background: {e}")
+                # Configure the frame to have a transparent background
+                self.frame.config(bg="#000000")
+                print("Successfully loaded menu background image")
+            else:
+                print(f"Background image not found at {bg_path}")
+        except Exception as e:
+            print(f"Error loading background: {e}")
     
     def load_custom_fonts(self):
         """Load and register custom fonts for the menu"""
@@ -1084,19 +1382,26 @@ class MainMenu:
     def load_high_score(self):
         """Load high score from file"""
         try:
-            with open('high_score.json', 'r') as f:
+            with open(os.path.join(os.path.dirname(__file__), 'high_score.json'), 'r') as f:
                 data = json.load(f)
                 return data.get('high_score', 0)
         except (FileNotFoundError, json.JSONDecodeError):
             return 0
 
     def start_new_game(self):
-        self.frame.destroy()
-        Game2048(self.master)
-
+        """Start a new game"""
+        # Clear the main menu
+        for widget in self.master.winfo_children():
+            widget.destroy()
+        
+        game = Game2048(self.master)
+    
     def continue_game(self):
         """Load the last saved game state"""
-        self.frame.destroy()
+        # Clear the main menu
+        for widget in self.master.winfo_children():
+            widget.destroy()
+        
         game = Game2048(self.master)
         if not game.load_game():
             # If loading fails, the game will start a new game
@@ -1112,17 +1417,18 @@ class MainMenu:
         
         Controls:
         - Arrow keys or WASD: Move tiles
+        - R: Restart game
+        - M: Toggle sound
+        - ESC: Show menu
         - Save Game: Save your current progress
         - Help: Show this help message
         - Quit: Exit the game
-        - 🔊: Toggle sound on/off
         """
         messagebox.showinfo("How to Play", help_text)
     
     def exit_game(self):
         self.master.quit()
-
-
+    
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("2048 Retro Game")
