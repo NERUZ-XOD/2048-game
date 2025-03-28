@@ -60,6 +60,22 @@ That's it! No installation or building required.
    python 2048_gui.py
    ```
 
+## Contributing
+
+This project is open-source and we welcome contributions from the community! Whether you're fixing bugs, improving the documentation, or proposing new features, your help is appreciated.
+
+Please see the [CONTRIBUTING.md](CONTRIBUTING.md) file for guidelines on how to contribute to this project.
+
+Some ways you can contribute:
+- Report bugs and issues
+- Suggest new features or improvements
+- Improve the game's performance
+- Add new animations or visual effects
+- Enhance the UI/UX
+- Port the game to other platforms
+
+Together, we can make this game even better!
+
 ## Dependencies
 
 - Python 3.6+
@@ -104,3 +120,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Original 2048 game by Gabriele Cirulli
 - Pixel art assets created for this project
 - "Press Start 2P" font by CodeMan38
+- Thanks to all contributors who help make this game better!
