@@ -8,6 +8,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('images/*.png', 'images'),
+        ('images/*.ico', 'images'),
         ('sounds/*.wav', 'sounds'),
         ('fonts/*.ttf', 'fonts'),
     ],
@@ -44,5 +45,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='images/2048.png',  # Use the 2048 tile as the app icon
+    icon='images/logo.ico',  # Use the new logo as the app icon
 )
