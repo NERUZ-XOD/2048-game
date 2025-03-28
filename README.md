@@ -13,12 +13,12 @@ A retro-styled implementation of the classic 2048 puzzle game with custom animat
 - **Sound Effects**: Satisfying sound effects for moves, merges, and game events
 - **Game State Management**: Save and load your game progress
 - **High Score Tracking**: The game remembers your best score
-- **Customizable Controls**: Use arrow keys or WASD to control the game
-- **Responsive Design**: The game adapts to different window sizes
 
 ## Screenshots
 
-![Game Screenshot](screenshots/gameplay.png)
+![Main Menu](screenshots/screenshot1.png)
+![Game Screenshot](screenshots/screenshot2.png)
+![help](screenshots/screenshot3.png)
 
 ## How to Play
 
@@ -46,8 +46,8 @@ That's it! No installation or building required.
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/2048-game-GUI.git
-   cd "2048 game (GUI)"
+   git clone https://github.com/NERUZ-XOD/2048-game.git
+   cd "2048-game"
    ```
 
 2. Install the required dependencies:
