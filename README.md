@@ -34,13 +34,9 @@ A retro-styled implementation of the classic 2048 puzzle game with custom animat
 
 ### Option 1: Run the Executable (Windows)
 
-**No building required!** The executable is already included in this repository in the `dist` folder. To play the game:
-
-1. Download or clone this repository
-2. Navigate to the `dist` folder
-3. Run `2048 Game.exe`
-
-That's it! No installation or building required.
+1. Go to the **[Releases](https://github.com/NERUZ-XOD/2048-game/releases)** page of this repository.  
+2. Download the latest version of `2048_Game.exe`.  
+3. Run the `.exe` file, and start playing! No installation required.  
 
 ### Option 2: Run from Source
 
@@ -108,7 +104,6 @@ However, if you want to build it yourself:
 - `images/`: Contains all game images and tiles
 - `sounds/`: Contains sound effects
 - `fonts/`: Contains the pixel font used in the game
-- `dist/`: Contains the executable version of the game
 - `data/`: Created automatically to store game saves and high scores
 
 ## License
