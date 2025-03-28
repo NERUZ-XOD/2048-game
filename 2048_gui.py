@@ -8,6 +8,7 @@ import pygame
 from tkinter import messagebox
 import tkinter.font as tkFont
 import time
+import sys
 
 class Game2048:
     def __init__(self, master):
@@ -648,21 +649,47 @@ class Game2048:
     def load_high_score(self):
         """Load high score from file"""
         try:
-            with open(os.path.join(os.path.dirname(__file__), 'high_score.json'), 'r') as f:
-                data = json.load(f)
-                return data.get('high_score', 0)
+            # Use a more robust path that works in both script and executable modes
+            app_data_dir = self.get_app_data_dir()
+            high_score_path = os.path.join(app_data_dir, 'high_score.json')
+            
+            if os.path.exists(high_score_path):
+                with open(high_score_path, 'r') as f:
+                    data = json.load(f)
+                    return data.get('high_score', 0)
+            return 0
         except (FileNotFoundError, json.JSONDecodeError):
             return 0
     
     def save_high_score(self):
         """Save high score to file"""
         try:
-            # Use absolute path to save the high score file
-            high_score_path = os.path.join(os.path.dirname(__file__), 'high_score.json')
+            # Use a more robust path that works in both script and executable modes
+            app_data_dir = self.get_app_data_dir()
+            high_score_path = os.path.join(app_data_dir, 'high_score.json')
+            
+            # Ensure directory exists
+            os.makedirs(app_data_dir, exist_ok=True)
+            
             with open(high_score_path, 'w') as f:
                 json.dump({'high_score': int(self.high_score)}, f)
         except Exception as e:
             print(f"Error saving high score: {e}")
+    
+    def get_app_data_dir(self):
+        """Get a consistent directory for app data that works in both script and executable modes"""
+        # For Windows, use AppData folder
+        app_name = "2048Game"
+        if hasattr(sys, 'frozen'):
+            # Running as compiled executable
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            # Running as script
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Create a data directory in the same location as the executable/script
+        data_dir = os.path.join(base_dir, 'data')
+        return data_dir
     
     def load_sounds(self):
         """Load sound effects"""
@@ -1085,18 +1112,21 @@ class Game2048:
         if self.is_animating:
             return
             
-        # Convert NumPy arrays and int64 values to standard Python types
-        grid_list = [[int(cell) for cell in row] for row in self.grid.tolist()]
-        
+        # Prepare game state
         game_state = {
-            'grid': grid_list,
+            'grid': self.grid.tolist(),
             'score': int(self.current_score),
             'high_score': int(self.high_score)
         }
         
         try:
-            # Use absolute path to save the game file
-            save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_game.json')
+            # Use the same app data directory as high score
+            app_data_dir = self.get_app_data_dir()
+            save_path = os.path.join(app_data_dir, 'saved_game.json')
+            
+            # Ensure directory exists
+            os.makedirs(app_data_dir, exist_ok=True)
+            
             with open(save_path, 'w') as f:
                 json.dump(game_state, f)
             self.show_save_success()
@@ -1171,23 +1201,43 @@ class Game2048:
     def load_game(self):
         """Load a saved game state"""
         try:
-            # Use absolute path to load the game file
-            save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_game.json')
+            # Use the same app data directory as high score
+            app_data_dir = self.get_app_data_dir()
+            save_path = os.path.join(app_data_dir, 'saved_game.json')
+            
+            if not os.path.exists(save_path):
+                self.show_no_save()
+                return
+                
             with open(save_path, 'r') as f:
                 game_state = json.load(f)
                 
-            self.grid = np.array(game_state['grid'], dtype=int)
-            self.current_score = int(game_state['score'])
-            self.high_score = int(game_state['high_score'])
-            self.is_animating = False  # Reset animation flag
-            self.update_ui()
-            self.show_game_loaded()
-            return True
+                # Restore grid
+                self.grid = np.array(game_state['grid'])
+                
+                # Restore score
+                self.current_score = int(game_state['score'])
+                
+                # Restore high score
+                self.high_score = int(game_state['high_score'])
+                
+                # Reset animation flag
+                self.is_animating = False
+                
+                # Update UI
+                self.update_ui()
+                
+                # Show success message
+                self.show_game_loaded()
+                
+                return True
+                
         except (FileNotFoundError, json.JSONDecodeError):
-            self.show_no_save_found()
+            self.show_no_save()
             return False
         except Exception as e:
-            messagebox.showerror("Error", f"Could not load game: {e}")
+            print(f"Error loading game: {e}")
+            messagebox.showerror("Load Error", f"Could not load game: {e}")
             return False
     
     def show_game_loaded(self):
@@ -1253,7 +1303,7 @@ class Game2048:
         # Auto-close after 3 seconds
         load_success.after(3000, load_success.destroy)
     
-    def show_no_save_found(self):
+    def show_no_save(self):
         """Show a stylized no saved game found message"""
         # Create a new top-level window
         no_save = tk.Toplevel()
@@ -1317,33 +1367,179 @@ class Game2048:
         no_save.after(3000, no_save.destroy)
     
     def show_help(self):
-        """Show help information"""
-        help_text = """
-        How to Play 2048:
+        """Show help information with a custom retro-styled window"""
+        # Create a new toplevel window for help
+        help_window = tk.Toplevel(self.window)
+        help_window.title("How to Play")
+        help_window.geometry("500x450")
+        help_window.resizable(False, False)
+        help_window.configure(bg="#1a1a2e")
         
-        - Use arrow keys or WASD to move tiles
-        - When two tiles with the same number touch, they merge into one
-        - Try to reach the 2048 tile!
+        # Make window modal (user must interact with it before returning to game)
+        help_window.transient(self.window)
+        help_window.grab_set()
         
-        Controls:
-        - Arrow keys or WASD: Move tiles
-        - R: Restart game
-        - M: Toggle sound
-        - ESC: Show menu
-        - Save Game: Save your current progress
-        - Help: Show this help message
-        - Quit: Exit the game
-        """
-        messagebox.showinfo("How to Play", help_text)
+        # Create a semi-transparent overlay for the retro look
+        overlay = tk.Frame(help_window, bg="#1a1a2e", bd=0)
+        overlay.place(x=0, y=0, width=500, height=450)
+        
+        # Create a canvas for the neon border
+        border_canvas = tk.Canvas(help_window, bg="#1a1a2e", highlightthickness=0, bd=0)
+        border_canvas.place(x=10, y=10, width=480, height=430)
+        
+        # Draw neon border with glow effect
+        border_canvas.create_rectangle(2, 2, 478, 428, outline="#00FFFF", width=2)
+        
+        # Title with retro font
+        title_label = tk.Label(help_window, text="HOW TO PLAY 2048", 
+                             font=("Press Start 2P", 16), bg="#1a1a2e", fg="#FFFF00")
+        title_label.pack(pady=(20, 10))
+        
+        # Help content frame
+        content_frame = tk.Frame(help_window, bg="#1a1a2e", bd=0)
+        content_frame.pack(fill="both", expand=True, padx=40, pady=10)
+        
+        # Game description
+        desc_label = tk.Label(content_frame, text="Combine tiles with the same number\nto reach the 2048 tile!", 
+                            font=("Press Start 2P", 8), bg="#1a1a2e", fg="#FFFFFF",
+                            justify="center")
+        desc_label.pack(pady=(0, 20))
+        
+        # Controls section
+        controls_title = tk.Label(content_frame, text="CONTROLS", 
+                                font=("Press Start 2P", 12), bg="#1a1a2e", fg="#00FFFF")
+        controls_title.pack(pady=(0, 10))
+        
+        # Controls list
+        controls = [
+            ("Arrow Keys / WASD", "Move tiles"),
+            ("R", "Restart game"),
+            ("M", "Toggle sound"),
+            ("ESC", "Show menu"),
+            ("S", "Save game")
+        ]
+        
+        # Create a frame for the controls grid
+        controls_frame = tk.Frame(content_frame, bg="#1a1a2e")
+        controls_frame.pack(pady=10)
+        
+        # Add each control with its description
+        for i, (key, action) in enumerate(controls):
+            key_label = tk.Label(controls_frame, text=key, 
+                               font=("Press Start 2P", 8), bg="#1a1a2e", fg="#FFFF00",
+                               anchor="e", width=20)
+            key_label.grid(row=i, column=0, padx=(0, 10), pady=5, sticky="e")
+            
+            action_label = tk.Label(controls_frame, text=action, 
+                                  font=("Press Start 2P", 8), bg="#1a1a2e", fg="#FFFFFF",
+                                  anchor="w", width=15)
+            action_label.grid(row=i, column=1, padx=(10, 0), pady=5, sticky="w")
+        
+        # Tips section
+        tip_label = tk.Label(content_frame, text="TIP: Plan your moves carefully!\nDon't get stuck with no valid moves.", 
+                           font=("Press Start 2P", 8), bg="#1a1a2e", fg="#FF9900",
+                           justify="center")
+        tip_label.pack(pady=20)
+        
+        # OK button with retro styling
+        button_style = {
+            "font": ("Press Start 2P", 10),
+            "bg": "#1a1a2e",
+            "activebackground": "#2a2a4e",
+            "bd": 0,
+            "width": 10,
+            "height": 2,
+            "relief": tk.FLAT,
+        }
+        
+        ok_button = tk.Button(help_window, text="OK", fg="#00FFFF",
+                           command=help_window.destroy,
+                           **button_style)
+        ok_button.pack(pady=20)
+        
+        # Center the window on the screen
+        help_window.update_idletasks()
+        width = help_window.winfo_width()
+        height = help_window.winfo_height()
+        x = (help_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (help_window.winfo_screenheight() // 2) - (height // 2)
+        help_window.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # Make sure the window stays on top and gets focus
+        help_window.lift()
+        help_window.focus_force()
     
     def toggle_music(self):
-        """Toggle music/sound effects on/off"""
+        """Toggle music/sound effects on/off with a custom retro-styled notification"""
         if not hasattr(self, 'music_on'):
             self.music_on = True
         
         self.music_on = not self.music_on
         status = "ON" if self.music_on else "OFF"
-        messagebox.showinfo("Sound", f"Sound effects are now {status}")
+        
+        # Create a new toplevel window for the notification
+        sound_notify = tk.Toplevel(self.window)
+        sound_notify.title("Sound")
+        sound_notify.geometry("350x200")
+        sound_notify.resizable(False, False)
+        sound_notify.configure(bg="#1a1a2e")
+        
+        # Make window modal
+        sound_notify.transient(self.window)
+        sound_notify.grab_set()
+        
+        # Create a canvas for the neon border
+        border_canvas = tk.Canvas(sound_notify, bg="#1a1a2e", highlightthickness=0, bd=0)
+        border_canvas.place(x=10, y=10, width=330, height=180)
+        
+        # Draw neon border with glow effect
+        border_canvas.create_rectangle(2, 2, 328, 178, outline="#00FFFF", width=2)
+        
+        # Sound icon
+        if self.music_on:
+            # Speaker icon when sound is on
+            icon_canvas = tk.Canvas(sound_notify, width=50, height=50, bg="#1a1a2e", highlightthickness=0)
+            icon_canvas.place(x=150, y=30)
+            
+            # Draw speaker icon
+            icon_canvas.create_oval(10, 15, 25, 35, fill="#FFFF00", outline="#FFFF00")
+            icon_canvas.create_polygon(20, 25, 35, 10, 35, 40, fill="#FFFF00", outline="#FFFF00")
+            
+            # Draw sound waves
+            icon_canvas.create_arc(38, 15, 48, 35, start=270, extent=180, style="arc", outline="#FFFF00", width=2)
+        else:
+            # Muted speaker icon when sound is off
+            icon_canvas = tk.Canvas(sound_notify, width=50, height=50, bg="#1a1a2e", highlightthickness=0)
+            icon_canvas.place(x=150, y=30)
+            
+            # Draw speaker icon
+            icon_canvas.create_oval(10, 15, 25, 35, fill="#FF5555", outline="#FF5555")
+            icon_canvas.create_polygon(20, 25, 35, 10, 35, 40, fill="#FF5555", outline="#FF5555")
+            
+            # Draw X over speaker
+            icon_canvas.create_line(40, 15, 50, 35, fill="#FF5555", width=2)
+            icon_canvas.create_line(40, 35, 50, 15, fill="#FF5555", width=2)
+        
+        # Status text
+        status_color = "#00FF00" if self.music_on else "#FF5555"
+        status_label = tk.Label(sound_notify, text=f"SOUND: {status}", 
+                              font=("Press Start 2P", 12), bg="#1a1a2e", fg=status_color)
+        status_label.pack(pady=(90, 20))
+        
+        # Auto-close after 2 seconds
+        sound_notify.after(2000, sound_notify.destroy)
+        
+        # Center the window on the screen
+        sound_notify.update_idletasks()
+        width = sound_notify.winfo_width()
+        height = sound_notify.winfo_height()
+        x = (sound_notify.winfo_screenwidth() // 2) - (width // 2)
+        y = (sound_notify.winfo_screenheight() // 2) - (height // 2)
+        sound_notify.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # Make sure the window stays on top and gets focus
+        sound_notify.lift()
+        sound_notify.focus_force()
     
     def quit_game(self):
         """Exit to main menu"""
@@ -1614,7 +1810,7 @@ class MainMenu:
     # Load pixel art background for the main menu
     def load_background(self):
         try:
-            bg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "menu_background.png")
+            bg_path = os.path.join(os.path.dirname(__file__), "images", "menu_background.png")
             if os.path.exists(bg_path):
                 img = Image.open(bg_path)
                 img = img.resize((400, 600), Image.Resampling.LANCZOS)
@@ -1654,12 +1850,33 @@ class MainMenu:
     def load_high_score(self):
         """Load high score from file"""
         try:
-            with open(os.path.join(os.path.dirname(__file__), 'high_score.json'), 'r') as f:
-                data = json.load(f)
-                return data.get('high_score', 0)
+            # Use a more robust path that works in both script and executable modes
+            app_data_dir = self.get_app_data_dir()
+            high_score_path = os.path.join(app_data_dir, 'high_score.json')
+            
+            if os.path.exists(high_score_path):
+                with open(high_score_path, 'r') as f:
+                    data = json.load(f)
+                    return data.get('high_score', 0)
+            return 0
         except (FileNotFoundError, json.JSONDecodeError):
             return 0
 
+    def get_app_data_dir(self):
+        """Get a consistent directory for app data that works in both script and executable modes"""
+        # For Windows, use AppData folder
+        app_name = "2048Game"
+        if hasattr(sys, 'frozen'):
+            # Running as compiled executable
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            # Running as script
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Create a data directory in the same location as the executable/script
+        data_dir = os.path.join(base_dir, 'data')
+        return data_dir
+    
     def start_new_game(self):
         """Start a new game"""
         # Clear the main menu
