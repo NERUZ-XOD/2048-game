@@ -930,7 +930,8 @@ class Game2048:
                 merged_positions.append(i)  # Track the position where merge happened
                 if row[i] == 2048:
                     self.show_win_message()
-                self.play_sound('merge')
+                # Removing duplicate sound trigger - the animate_merges method already plays this sound
+                # self.play_sound('merge')
         return row, merged_positions
     
     def is_game_over(self):
